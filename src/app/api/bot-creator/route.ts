@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
      }
 
     if (runStatus.status === 'completed') {
-      const messages = await openai.beta.threads.messages.list(thread.id);
+      const messages = await openai.beta.threads.messages.list(thread.id, { order: 'desc' });
       const lastMessage = messages.data.find((msg: any) => msg.role === 'assistant');
       
       let response = '';
@@ -192,17 +192,21 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    let vectorStoreId: string | undefined;
+    if (files && files.length > 0) {
+      const store = await openai.beta.vectorStores.create({ file_ids: files });
+      vectorStoreId = store.id;
+    }
+
     // Создаем нового ассистента в OpenAI
     const assistant = await openai.beta.assistants.create({
       name: botConfig.name,
       instructions: botConfig.instructions,
       model: 'gpt-4-turbo-preview',
       tools: [{ type: 'file_search' }],
-      ...(files && files.length > 0 && {
+      ...(vectorStoreId && {
         tool_resources: {
-          file_search: {
-            vector_store_ids: files
-          }
+          file_search: { vector_store_ids: [vectorStoreId] }
         }
       })
     });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Navigation from '../../components/Navigation';
 
@@ -16,11 +16,19 @@ interface Bot {
   updatedAt: string;
 }
 
+interface UploadedFile {
+  id: string;
+  name: string;
+  size: number;
+}
+
 export default function Channels() {
   const [loading, setLoading] = useState(true);
   const [bots, setBots] = useState<Bot[]>([]);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingBot, setEditingBot] = useState<Bot | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [editForm, setEditForm] = useState({
     name: '',
     description: '',
@@ -98,11 +106,42 @@ export default function Channels() {
             code_interpreter: a.tools?.some((t: any) => t.type === 'code_interpreter') || false,
             retrieval: a.tools?.some((t: any) => t.type === 'retrieval') || false
           }));
+          if (data.files) {
+            setUploadedFiles(data.files.map((f: any) => ({ id: f.id, name: f.filename, size: f.bytes })));
+          }
         }
       } catch (e) {
         console.error('Error loading assistant', e);
       }
     }
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files) return;
+
+    for (const file of Array.from(files)) {
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          setUploadedFiles(prev => [...prev, { id: result.fileId, name: result.filename, size: result.size }]);
+        }
+      } catch (error) {
+        console.error('Error uploading file:', error);
+      }
+    }
+  };
+
+  const removeFile = (fileId: string) => {
+    setUploadedFiles(prev => prev.filter(f => f.id !== fileId));
   };
 
   const handleUpdateBot = async () => {
@@ -144,7 +183,8 @@ export default function Channels() {
                 ...(editForm.retrieval ? [{ type: 'retrieval' }] : []),
                 { type: 'file_search' }
               ]
-            }
+            },
+            files: uploadedFiles.map(f => f.id)
           })
         });
       }
@@ -398,12 +438,15 @@ export default function Channels() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Модель</label>
-                  <input
-                    type="text"
+                  <select
                     value={editForm.model}
                     onChange={(e) => setEditForm(prev => ({ ...prev, model: e.target.value }))}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  >
+                    <option value="gpt-4o">gpt-4o</option>
+                    <option value="gpt-4-turbo-preview">gpt-4-turbo-preview</option>
+                    <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Температура</label>
@@ -459,6 +502,34 @@ export default function Channels() {
                   />
                   <span className="text-sm">Retrieval</span>
                 </label>
+              </div>
+
+              {uploadedFiles.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {uploadedFiles.map(f => (
+                    <div key={f.id} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded">
+                      <span className="text-sm text-gray-700">📎 {f.name}</span>
+                      <button onClick={() => removeFile(f.id)} className="text-red-500 text-sm">✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-4">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileUpload}
+                  multiple
+                  className="hidden"
+                  accept=".txt,.pdf,.doc,.docx,.md,.csv"
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="bg-gray-100 text-gray-600 px-3 py-2 rounded-lg hover:bg-gray-200"
+                >
+                  Добавить файл
+                </button>
               </div>
             </div>
             

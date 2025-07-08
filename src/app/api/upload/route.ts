@@ -41,11 +41,11 @@ export async function POST(request: NextRequest) {
       file = await convertCsvToTxt(file);
     }
 
-    // Загружаем файл в OpenAI
-    const uploadedFile = await openai.files.create({
-      file: file,
-      purpose: 'assistants'
-    });
+  // Загружаем файл в OpenAI
+  const uploadedFile = await openai.files.create({
+    file: { name: file.name, data: Buffer.from(await file.arrayBuffer()) },
+    purpose: 'assistants'
+  });
 
     return NextResponse.json({
       fileId: uploadedFile.id,

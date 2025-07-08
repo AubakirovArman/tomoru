@@ -194,7 +194,7 @@ export default function AddBotPage() {
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && e.shiftKey) {
       e.preventDefault();
       sendMessage();
     }
@@ -305,14 +305,14 @@ export default function AddBotPage() {
               )}
               
               <div className="flex space-x-2">
-                <input
-                  type="text"
+                <textarea
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder="Опишите вашего бота..."
-                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  onKeyDown={handleKeyPress}
+                  placeholder="Опишите вашего бота... (Shift+Enter для отправки)"
+                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none min-h-[40px] max-h-[120px]"
                   disabled={isTyping}
+                  rows={1}
                 />
                 <input
                   type="file"

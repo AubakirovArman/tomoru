@@ -49,7 +49,7 @@ const ChatWindow = () => {
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
     }
@@ -77,7 +77,7 @@ const ChatWindow = () => {
                   : 'bg-gray-100 text-gray-800'
               }`}
             >
-              <p className="text-sm">{message.text}</p>
+              <div className="whitespace-pre-wrap text-sm">{message.text}</div>
               <p className={`text-xs mt-1 ${
                 message.isUser ? 'text-blue-100' : 'text-gray-500'
               }`}>
@@ -109,14 +109,14 @@ const ChatWindow = () => {
       {/* Input */}
       <div className="border-t p-4">
         <div className="flex space-x-2">
-          <input
-            type="text"
+          <textarea
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Напишите сообщение..."
-            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            onKeyDown={handleKeyPress}
+            placeholder="Напишите сообщение... (Shift+Enter для отправки)"
+            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none min-h-[40px] max-h-[120px]"
             disabled={isLoading}
+            rows={1}
           />
           <button
             onClick={handleSendMessage}

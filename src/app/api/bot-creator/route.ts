@@ -46,7 +46,8 @@ export async function POST(request: NextRequest) {
     // Ждем завершения
     let runStatus = run;
     
-    while (runStatus.status === 'in_progress' || runStatus.status === 'queued' || runStatus.status === 'requires_action') {
+    // Ждем завершения или запроса на выполнение функций
+    while (runStatus.status === 'in_progress' || runStatus.status === 'queued') {
        await new Promise(resolve => setTimeout(resolve, 1000));
        try {
          const runs = await openai.beta.threads.runs.list(thread.id);
@@ -79,16 +80,19 @@ export async function POST(request: NextRequest) {
               
               // Отправляем результаты функций
               await openai.beta.threads.runs.submitToolOutputs(
+                thread.id,
                 runStatus.id,
                 {
-                  thread_id: thread.id,
                   tool_outputs: toolOutputs
                 }
               );
               
               // Ждем завершения после отправки результатов
               let finalRunStatus = runStatus;
-              while (finalRunStatus.status === 'in_progress' || finalRunStatus.status === 'queued') {
+              while (
+                finalRunStatus.status === 'in_progress' ||
+                finalRunStatus.status === 'queued'
+              ) {
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 try {
                   const runs = await openai.beta.threads.runs.list(thread.id);

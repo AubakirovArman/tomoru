@@ -194,7 +194,7 @@ export default function AddBotPage() {
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
     }
@@ -309,7 +309,7 @@ export default function AddBotPage() {
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={handleKeyPress}
-                  placeholder="Опишите вашего бота... (Shift+Enter для отправки)"
+                  placeholder="Опишите вашего бота... (Enter для отправки)"
                   className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none min-h-[40px] max-h-[120px]"
                   disabled={isTyping}
                   rows={1}
@@ -320,7 +320,7 @@ export default function AddBotPage() {
                   onChange={handleFileUpload}
                   multiple
                   className="hidden"
-                  accept=".txt,.pdf,.doc,.docx,.md"
+                  accept=".txt,.pdf,.doc,.docx,.md,.csv"
                 />
                 <button
                   onClick={() => fileInputRef.current?.click()}

@@ -1,60 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { getBotFatherAssistant, openai } from '@/lib/assistant';
 import { prisma } from '@/lib/prisma';
 import { verifyToken } from '@/lib/auth';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-// Инструкции для Бота-Отца
-const BOT_FATHER_INSTRUCTIONS = `
-Привет! 👋 Меня зовут Бот-Отец, и я твой персональный помощник по созданию AI-ботов!
-
-Я здесь, чтобы помочь тебе создать идеального цифрового помощника для твоего бизнеса или проекта. Не волнуйся, если ты не разбираешься в технических деталях - это моя работа! Я буду задавать простые вопросы, а ты просто отвечай как есть. 😊
-
-МОЙ ПОДХОД:
-🔍 Сначала я внимательно изучу все файлы, которые ты прикрепишь (если есть)
-❓ Затем буду задавать тебе вопросы ПО ОДНОМУ - не спешу, жду твой ответ на каждый
-🎯 Помогу определить, какой именно бот тебе нужен
-✨ Создам для тебя готового к работе AI-помощника
-
-ВАЖНО: Я задаю только ОДИН вопрос за раз и всегда жду твоего ответа, прежде чем перейти к следующему. Если что-то непонятно - скажи, я объясню проще!
-
-МОИ ЭТАПЫ РАБОТЫ:
-
-1. ЗНАКОМСТВО И АНАЛИЗ:
-   - Изучаю твои файлы (если есть)
-   - Узнаю о твоем бизнесе простыми словами
-   - Понимаю, чем ты занимаешься
-
-2. ПОШАГОВЫЕ ВОПРОСЫ (по одному!):
-   - Для кого создаем бота? (клиенты, сотрудники, партнеры?)
-   - Какие задачи должен решать бот?
-   - Как должен общаться бот? (формально, дружелюбно, профессионально?)
-   - Какую информацию бот должен знать?
-   - Есть ли особые требования?
-
-3. СОЗДАНИЕ БОТА:
-   - Пишу подробные инструкции для бота
-   - Включаю всю информацию о твоем бизнесе
-   - Добавляю примеры общения
-   - Настраиваю характер и стиль
-
-ИТОГОВАЯ КОНФИГУРАЦИЯ (создаю только после всех вопросов):
-{
-  "name": "Понятное название бота",
-  "description": "Простое описание того, что умеет бот",
-  "instructions": "Очень подробные инструкции с примерами, правилами, информацией о компании и стиле общения",
-  "personality": "Описание характера и манеры общения бота",
-  "specialization": "Основная специализация бота",
-  "knowledge_base": "Вся важная информация о компании и услугах"
-}
-
-Помни: я создаю ботов, которые работают самостоятельно и знают все о твоем бизнесе!
-
-Готов начать? Расскажи мне о своем проекте или прикрепи файлы с информацией! 🚀
-`;
 
 export async function POST(request: NextRequest) {
   try {
@@ -79,25 +26,14 @@ export async function POST(request: NextRequest) {
       })
     });
 
-    // Создаем или получаем ассистента
+    // Получаем ассистента "Бот-Отец"
     let assistant;
     try {
-      // Пытаемся найти существующего ассистента
-      const assistants = await openai.beta.assistants.list();
-      assistant = assistants.data.find(a => a.name === 'Bot Father');
-      
-      if (!assistant) {
-        // Создаем нового ассистента
-        assistant = await openai.beta.assistants.create({
-          name: 'Bot Father',
-          instructions: BOT_FATHER_INSTRUCTIONS,
-          model: 'gpt-4-turbo-preview'
-        });
-      }
+      assistant = await getBotFatherAssistant();
     } catch (error) {
       console.error('Error with assistant:', error);
       return NextResponse.json(
-        { error: 'Failed to create or retrieve assistant' },
+        { error: 'Failed to get assistant' },
         { status: 500 }
       );
     }
@@ -110,7 +46,7 @@ export async function POST(request: NextRequest) {
     // Ждем завершения
     let runStatus = run;
     
-    while (runStatus.status === 'in_progress' || runStatus.status === 'queued') {
+    while (runStatus.status === 'in_progress' || runStatus.status === 'queued' || runStatus.status === 'requires_action') {
        await new Promise(resolve => setTimeout(resolve, 1000));
        try {
          const runs = await openai.beta.threads.runs.list(thread.id);
@@ -126,7 +62,76 @@ export async function POST(request: NextRequest) {
        }
      }
 
-    if (runStatus.status === 'completed') {
+    if (runStatus.status === 'completed' || runStatus.status === 'requires_action') {
+      // Проверяем, требуется ли выполнение функций
+      if (runStatus.required_action?.type === 'submit_tool_outputs') {
+        const toolCalls = runStatus.required_action.submit_tool_outputs.tool_calls;
+        const toolOutputs = [];
+        
+        for (const toolCall of toolCalls) {
+          if (toolCall.type === 'function' && toolCall.function.name === 'create_bot_config') {
+            try {
+              const botConfig = JSON.parse(toolCall.function.arguments);
+              toolOutputs.push({
+                tool_call_id: toolCall.id,
+                output: JSON.stringify({ success: true, config_received: true })
+              });
+              
+              // Отправляем результаты функций
+              await openai.beta.threads.runs.submitToolOutputs(
+                runStatus.id,
+                {
+                  thread_id: thread.id,
+                  tool_outputs: toolOutputs
+                }
+              );
+              
+              // Ждем завершения после отправки результатов
+              let finalRunStatus = runStatus;
+              while (finalRunStatus.status === 'in_progress' || finalRunStatus.status === 'queued') {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                try {
+                  const runs = await openai.beta.threads.runs.list(thread.id);
+                  const currentRun = runs.data.find(r => r.id === runStatus.id);
+                  if (currentRun) {
+                    finalRunStatus = currentRun;
+                  } else {
+                    break;
+                  }
+                } catch (error) {
+                  console.error('Error retrieving final run status:', error);
+                  break;
+                }
+              }
+              
+              // Получаем финальное сообщение
+              const messages = await openai.beta.threads.messages.list(thread.id, { order: 'desc' });
+              const lastMessage = messages.data.find((msg: any) => msg.role === 'assistant');
+              
+              let response = '';
+              if (lastMessage?.content[0]?.type === 'text') {
+                response = lastMessage.content[0].text.value;
+              } else {
+                response = 'Конфигурация бота создана успешно!';
+              }
+              
+              return NextResponse.json({
+                response,
+                threadId: thread.id,
+                botConfig
+              });
+            } catch (error) {
+              console.error('Error parsing bot config from function call:', error);
+              toolOutputs.push({
+                tool_call_id: toolCall.id,
+                output: JSON.stringify({ success: false, error: 'Invalid config format' })
+              });
+            }
+          }
+        }
+      }
+      
+      // Обычное сообщение без вызова функций
       const messages = await openai.beta.threads.messages.list(thread.id, { order: 'desc' });
       const lastMessage = messages.data.find((msg: any) => msg.role === 'assistant');
       
@@ -136,23 +141,11 @@ export async function POST(request: NextRequest) {
       } else {
         response = 'Извините, произошла ошибка.';
       }
-      let botConfig = null;
-
-      // Проверяем, есть ли JSON конфигурация в ответе
-      const jsonMatch = response.match(/\{[\s\S]*?\}/);
-      if (jsonMatch) {
-        try {
-          botConfig = JSON.parse(jsonMatch[0]);
-          response = response.replace(jsonMatch[0], '').trim();
-        } catch (e) {
-          console.error('JSON parse error:', e);
-        }
-      }
 
       return NextResponse.json({
         response,
         threadId: thread.id,
-        botConfig
+        botConfig: null
       });
     }
 
@@ -192,23 +185,12 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    let vectorStoreId: string | undefined;
-    if (files && files.length > 0) {
-      const store = await openai.beta.vectorStores.create({ file_ids: files });
-      vectorStoreId = store.id;
-    }
-
     // Создаем нового ассистента в OpenAI
     const assistant = await openai.beta.assistants.create({
       name: botConfig.name,
       instructions: botConfig.instructions,
-      model: 'gpt-4-turbo-preview',
-      tools: [{ type: 'file_search' }],
-      ...(vectorStoreId && {
-        tool_resources: {
-          file_search: { vector_store_ids: [vectorStoreId] }
-        }
-      })
+      model: 'gpt-4o',
+      tools: [{ type: 'file_search' }]
     });
 
     // Сохраняем бота в базе данных

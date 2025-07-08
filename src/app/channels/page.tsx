@@ -12,6 +12,9 @@ interface Bot {
   personality: string;
   specialization: string;
   openaiId: string | null;
+  telegramBotToken: string | null;
+  telegramWebhookUrl: string | null;
+  telegramEnabled: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -35,7 +38,7 @@ export default function Channels() {
     instructions: '',
     personality: '',
     specialization: '',
-    model: 'gpt-4-turbo-preview',
+    model: 'gpt-4o',
     temperature: 0.7,
     top_p: 1,
     response_format: 'text',
@@ -198,6 +201,72 @@ export default function Channels() {
       }
     } catch (error) {
       console.error('Error updating bot:', error);
+    }
+  };
+
+  const handleSetupTelegram = async (botId: number) => {
+    const tokenInput = document.getElementById('telegramToken') as HTMLInputElement;
+    const telegramBotToken = tokenInput?.value;
+    
+    if (!telegramBotToken) {
+      alert('Введите токен Telegram бота');
+      return;
+    }
+    
+    try {
+      const token = localStorage.getItem('token');
+      const webhookUrl = `${window.location.origin}/api/telegram/webhook`;
+      
+      const response = await fetch('/api/telegram/setup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          botId,
+          telegramBotToken,
+          webhookUrl
+        })
+      });
+      
+      if (response.ok) {
+        await fetchBots(); // Обновляем список
+        alert('Telegram бот успешно подключен!');
+      } else {
+        const error = await response.json();
+        alert(`Ошибка: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Error setting up Telegram:', error);
+      alert('Произошла ошибка при подключении');
+    }
+  };
+  
+  const handleDisableTelegram = async (botId: number) => {
+    if (!confirm('Вы уверены, что хотите отключить Telegram бота?')) return;
+    
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/telegram/setup', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ botId })
+      });
+      
+      if (response.ok) {
+        await fetchBots(); // Обновляем список
+        alert('Telegram бот отключен');
+      } else {
+        const error = await response.json();
+        alert(`Ошибка: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Error disabling Telegram:', error);
+      alert('Произошла ошибка при отключении');
     }
   };
 
@@ -530,6 +599,56 @@ export default function Channels() {
                 >
                   Добавить файл
                 </button>
+              </div>
+
+              {/* Telegram Integration Section */}
+              <div className="border-t pt-4 mt-6">
+                <h3 className="text-lg font-medium text-gray-800 mb-3">Интеграция с Telegram</h3>
+                
+                {editingBot.telegramEnabled ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg p-3">
+                      <div>
+                        <div className="text-sm font-medium text-green-800">Telegram бот подключен</div>
+                        <div className="text-xs text-green-600">Бот активен и готов к работе</div>
+                      </div>
+                      <button
+                        onClick={() => handleDisableTelegram(editingBot.id)}
+                        className="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1 rounded text-sm"
+                      >
+                        Отключить
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="text-sm text-gray-600 mb-3">
+                      Подключите Telegram бота для автоматических ответов пользователям
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Токен Telegram бота
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        id="telegramToken"
+                      />
+                      <div className="text-xs text-gray-500 mt-1">
+                        Получите токен у @BotFather в Telegram
+                      </div>
+                    </div>
+                    
+                    <button
+                      onClick={() => handleSetupTelegram(editingBot.id)}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm"
+                    >
+                      Подключить Telegram
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
             

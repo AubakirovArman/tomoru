@@ -23,17 +23,20 @@ model User {
 }
 
 model Bot {
-  id             Int      @id @default(autoincrement())
-  name           String
-  description    String
-  instructions   String
-  personality    String
-  specialization String
-  openaiId       String?  // ID ассистента в OpenAI
-  userId         Int
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                 Int      @id @default(autoincrement())
+  name               String
+  description        String
+  instructions       String
+  personality        String
+  specialization     String
+  openaiId           String?  // ID ассистента в OpenAI
+  telegramBotToken   String?  // Токен Telegram бота
+  telegramWebhookUrl String?  // URL веб-хука для Telegram
+  telegramEnabled    Boolean  @default(false) // Включена ли Telegram интеграция
+  userId             Int
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   @@map("bots")
 }

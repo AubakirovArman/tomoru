@@ -26,7 +26,13 @@ export default function Channels() {
     description: '',
     instructions: '',
     personality: '',
-    specialization: ''
+    specialization: '',
+    model: 'gpt-4-turbo-preview',
+    temperature: 0.7,
+    top_p: 1,
+    response_format: 'text',
+    code_interpreter: false,
+    retrieval: false
   });
   const router = useRouter();
 
@@ -62,16 +68,41 @@ export default function Channels() {
     }
   };
 
-  const handleEditBot = (bot: Bot) => {
+  const handleEditBot = async (bot: Bot) => {
     setEditingBot(bot);
-    setEditForm({
+    setEditForm(prev => ({
+      ...prev,
       name: bot.name,
       description: bot.description,
       instructions: bot.instructions,
       personality: bot.personality,
       specialization: bot.specialization
-    });
+    }));
     setShowEditModal(true);
+
+    if (bot.openaiId) {
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(`/api/assistant?id=${bot.openaiId}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const a = data.assistant;
+          setEditForm(prev => ({
+            ...prev,
+            model: a.model,
+            temperature: a.temperature ?? prev.temperature,
+            top_p: a.top_p ?? prev.top_p,
+            response_format: a.response_format?.type || prev.response_format,
+            code_interpreter: a.tools?.some((t: any) => t.type === 'code_interpreter') || false,
+            retrieval: a.tools?.some((t: any) => t.type === 'retrieval') || false
+          }));
+        }
+      } catch (e) {
+        console.error('Error loading assistant', e);
+      }
+    }
   };
 
   const handleUpdateBot = async () => {
@@ -90,6 +121,33 @@ export default function Channels() {
           botConfig: editForm
         })
       });
+
+      if (editingBot.openaiId) {
+        await fetch('/api/assistant', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            assistantId: editingBot.openaiId,
+            data: {
+              name: editForm.name,
+              description: editForm.description,
+              instructions: editForm.instructions,
+              model: editForm.model,
+              temperature: editForm.temperature,
+              top_p: editForm.top_p,
+              response_format: { type: editForm.response_format },
+              tools: [
+                ...(editForm.code_interpreter ? [{ type: 'code_interpreter' }] : []),
+                ...(editForm.retrieval ? [{ type: 'retrieval' }] : []),
+                { type: 'file_search' }
+              ]
+            }
+          })
+        });
+      }
 
       if (response.ok) {
         await fetchBots(); // Обновляем список
@@ -335,6 +393,72 @@ export default function Channels() {
                   rows={4}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Модель</label>
+                  <input
+                    type="text"
+                    value={editForm.model}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, model: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Температура</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="2"
+                    value={editForm.temperature}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, temperature: parseFloat(e.target.value) }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Top P</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="1"
+                    value={editForm.top_p}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, top_p: parseFloat(e.target.value) }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Формат ответа</label>
+                  <select
+                    value={editForm.response_format}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, response_format: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="text">text</option>
+                    <option value="json_object">json_object</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-4 mt-4">
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={editForm.code_interpreter}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, code_interpreter: e.target.checked }))}
+                  />
+                  <span className="text-sm">Code Interpreter</span>
+                </label>
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={editForm.retrieval}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, retrieval: e.target.checked }))}
+                  />
+                  <span className="text-sm">Retrieval</span>
+                </label>
               </div>
             </div>
             

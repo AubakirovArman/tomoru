@@ -17,13 +17,33 @@ export async function GET(request: NextRequest) {
   try {
     const assistant = await openai.beta.assistants.retrieve(id);
     let files: { id: string; filename: string; bytes: number }[] = [];
-    const vectorIds = assistant.tool_resources?.file_search?.vector_store_ids || [];
-    for (const vsId of vectorIds) {
-      const list = await openai.beta.vectorStores.files.list(vsId);
-      for (const f of list.data) {
-        files.push({ id: f.id, filename: f.filename, bytes: f.bytes });
+    
+    // Получаем файлы из vector stores согласно документации
+    const vectorStoreIds = assistant.tool_resources?.file_search?.vector_store_ids || [];
+    
+    for (const vectorStoreId of vectorStoreIds) {
+      try {
+        const vectorStoreFiles = await openai.vectorStores.files.list(vectorStoreId);
+        
+        if (vectorStoreFiles && vectorStoreFiles.data) {
+          for (const vectorFile of vectorStoreFiles.data) {
+            try {
+              const file = await openai.files.retrieve(vectorFile.id);
+              files.push({
+                id: file.id,
+                filename: file.filename || 'unknown',
+                bytes: file.bytes || 0
+              });
+            } catch (fileError) {
+              console.error(`Error retrieving file ${vectorFile.id}:`, fileError);
+            }
+          }
+        }
+      } catch (vectorError) {
+        console.error(`Error retrieving files from vector store ${vectorStoreId}:`, vectorError);
       }
     }
+    
     return NextResponse.json({ assistant, files });
   } catch (error) {
     console.error('Error retrieving assistant:', error);
@@ -56,15 +76,40 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
-    let vectorStoreId: string | undefined;
+    // Создаем vector store и прикрепляем файлы согласно документации
     if (files && files.length > 0) {
-      const store = await openai.beta.vectorStores.create({ file_ids: files });
-      vectorStoreId = store.id;
-      data.tools = [
-        ...(data.tools || []),
-        { type: 'file_search' }
-      ];
-      data.tool_resources = { file_search: { vector_store_ids: [vectorStoreId] } };
+      try {
+        // Логируем доступные методы для отладки
+        console.log('OpenAI beta object:', Object.keys(openai.beta));
+        console.log('OpenAI object keys:', Object.keys(openai));
+        
+        // Создаем vector store через основной API
+        const vectorStore = await openai.vectorStores.create({
+             name: `Files for ${data.name || 'Assistant'}`,
+             file_ids: files
+           });
+        
+        console.log('Created vector store:', vectorStore.id);
+        
+        // Добавляем file_search tool и настраиваем tool_resources
+        data.tools = [
+          ...(data.tools || []),
+          { type: 'file_search' }
+        ];
+        
+        data.tool_resources = {
+          file_search: {
+            vector_store_ids: [vectorStore.id]
+          }
+        };
+      } catch (vectorError) {
+        console.error('Error creating vector store:', vectorError);
+        // Fallback: добавляем только file_search tool без файлов
+        data.tools = [
+          ...(data.tools || []),
+          { type: 'file_search' }
+        ];
+      }
     }
 
     const assistant = await openai.beta.assistants.update(assistantId, data);

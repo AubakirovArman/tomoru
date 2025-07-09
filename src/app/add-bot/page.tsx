@@ -132,6 +132,7 @@ export default function AddBotPage() {
 
       if (response.ok) {
         const result = await response.json();
+        console.log('API Response:', result);
         
         const botMessage: Message = {
           id: Date.now() + 1,
@@ -144,8 +145,12 @@ export default function AddBotPage() {
         setThreadId(result.threadId);
 
         // Проверяем, создал ли бот конфигурацию
+        console.log('Checking for botConfig:', result.botConfig);
         if (result.botConfig) {
+          console.log('Setting bot config:', result.botConfig);
           setBotConfig(result.botConfig);
+        } else {
+          console.log('No botConfig in response');
         }
       }
     } catch (error) {
@@ -182,13 +187,21 @@ export default function AddBotPage() {
 
       if (response.ok) {
         const result = await response.json();
+        console.log('Bot created successfully:', result);
+        
+        // Показываем уведомление об успехе
+        alert(`✅ Бот "${botConfig.name}" успешно создан!\n\nВы будете перенаправлены на страницу управления ботами.`);
+        
         // Перенаправляем на страницу каналов
         router.push('/channels');
       } else {
-        console.error('Failed to create bot:', await response.text());
+        const errorText = await response.text();
+        console.error('Failed to create bot:', errorText);
+        alert(`❌ Ошибка при создании бота:\n\n${errorText}`);
       }
     } catch (error) {
       console.error('Error creating bot:', error);
+      alert(`❌ Произошла ошибка при создании бота:\n\n${error instanceof Error ? error.message : String(error)}`);
     }
     setIsCreatingBot(false);
   };

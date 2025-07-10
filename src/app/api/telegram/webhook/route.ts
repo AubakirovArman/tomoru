@@ -120,13 +120,14 @@ async function sendTelegramMessage(botToken: string, chatId: number, text: strin
       },
       body: JSON.stringify({
         chat_id: chatId,
-        text: text,
-        parse_mode: 'Markdown'
+        text: text
+        // Removed parse_mode to avoid Markdown parsing errors
       })
     });
     
     if (!response.ok) {
-      console.error('Failed to send Telegram message:', await response.text());
+      const errorText = await response.text();
+      console.error('Failed to send Telegram message:', errorText);
     }
   } catch (error) {
     console.error('Error sending Telegram message:', error);

@@ -35,6 +35,7 @@ export default function AddBotPage() {
   const [isTyping, setIsTyping] = useState(false);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [allUploadedFiles, setAllUploadedFiles] = useState<UploadedFile[]>([]);
   const [botConfig, setBotConfig] = useState<BotConfig | null>(null);
   const [isCreatingBot, setIsCreatingBot] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -90,6 +91,11 @@ export default function AddBotPage() {
             size: result.size
           };
           setUploadedFiles(prev => [...prev, uploadedFile]);
+          // Добавляем в allUploadedFiles только если файла там еще нет
+          setAllUploadedFiles(prev => {
+            const exists = prev.some(f => f.id === uploadedFile.id);
+            return exists ? prev : [...prev, uploadedFile];
+          });
         }
       } catch (error) {
         console.error('Error uploading file:', error);
@@ -99,6 +105,7 @@ export default function AddBotPage() {
 
   const removeFile = (fileId: string) => {
     setUploadedFiles(prev => prev.filter(f => f.id !== fileId));
+    setAllUploadedFiles(prev => prev.filter(f => f.id !== fileId));
   };
 
   const sendMessage = async () => {
@@ -114,6 +121,7 @@ export default function AddBotPage() {
 
     setMessages(prev => [...prev, userMessage]);
     setInputText('');
+    // Очищаем только текущие файлы для ввода, allUploadedFiles сохраняем
     setUploadedFiles([]);
     setIsTyping(true);
 
@@ -181,7 +189,7 @@ export default function AddBotPage() {
         },
         body: JSON.stringify({
           botConfig,
-          files: uploadedFiles.map(f => f.id)
+          files: allUploadedFiles.map(f => f.id)
         })
       });
 
@@ -375,6 +383,24 @@ export default function AddBotPage() {
                   <h3 className="font-medium text-gray-700 mb-2">Личность:</h3>
                   <p className="text-gray-900">{botConfig.personality}</p>
                 </div>
+                {allUploadedFiles.length > 0 && (
+                  <div className="md:col-span-2">
+                    <h3 className="font-medium text-gray-700 mb-2">Прикрепленные файлы ({allUploadedFiles.length}):</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {allUploadedFiles.map((file) => (
+                        <div key={file.id} className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 flex items-center space-x-2">
+                          <span className="text-sm text-green-800">📎 {file.name}</span>
+                          <button
+                            onClick={() => removeFile(file.id)}
+                            className="text-green-600 hover:text-green-800"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex space-x-4">

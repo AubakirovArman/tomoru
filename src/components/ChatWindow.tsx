@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { handleAuthError, createAuthHeaders } from '@/lib/authUtils';
 
 interface Message {
   id: number;
@@ -9,11 +11,27 @@ interface Message {
   timestamp: Date;
 }
 
-const ChatWindow = () => {
+interface Bot {
+  id: number;
+  name: string;
+  description: string;
+  instructions: string;
+  personality: string;
+  specialization: string;
+  openaiId: string | null;
+}
+
+interface ChatWindowProps {
+  bot: Bot;
+  onClose: () => void;
+}
+
+const ChatWindow = ({ bot, onClose }: ChatWindowProps) => {
+  const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 1,
-      text: 'Привет! Я TOMORU AI. Как дела? Чем могу помочь?',
+      text: `Привет! Я ${bot.name}. ${bot.description} Чем могу помочь?`,
       isUser: false,
       timestamp: new Date(),
     },
@@ -35,17 +53,57 @@ const ChatWindow = () => {
     setInputText('');
     setIsLoading(true);
 
-    // Симуляция ответа AI
-    setTimeout(() => {
+    // Отправляем сообщение боту через API
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: createAuthHeaders({
+          'Content-Type': 'application/json'
+        }),
+        body: JSON.stringify({
+          botId: bot.id,
+          message: userMessage.text,
+          conversationHistory: messages.map(m => ({
+            role: m.isUser ? 'user' : 'assistant',
+            content: m.text
+          }))
+        })
+      });
+
+      if (handleAuthError(response, router)) {
+        return;
+      }
+
+      if (response.ok) {
+        const data = await response.json();
+        const aiResponse: Message = {
+          id: Date.now() + 1,
+          text: data.response,
+          isUser: false,
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, aiResponse]);
+      } else {
+        const aiResponse: Message = {
+          id: Date.now() + 1,
+          text: 'Извините, произошла ошибка при обработке вашего сообщения.',
+          isUser: false,
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, aiResponse]);
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
       const aiResponse: Message = {
         id: Date.now() + 1,
-        text: `Спасибо за ваше сообщение: "${userMessage.text}". Это демо-версия TOMORU AI. В полной версии здесь будет настоящий AI ответ!`,
+        text: 'Извините, произошла ошибка при отправке сообщения.',
         isUser: false,
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, aiResponse]);
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -58,9 +116,17 @@ const ChatWindow = () => {
   return (
     <div className="bg-white rounded-lg shadow-lg h-[600px] w-full max-w-4xl flex flex-col">
       {/* Chat Header */}
-      <div className="bg-blue-600 text-white p-4 rounded-t-lg">
-        <h3 className="text-lg font-semibold">💬 Чат с TOMORU AI</h3>
-        <p className="text-blue-100 text-sm">Онлайн • Готов помочь</p>
+      <div className="bg-blue-600 text-white p-4 rounded-t-lg flex justify-between items-center">
+        <div>
+          <h3 className="text-lg font-semibold">💬 Чат с {bot.name}</h3>
+          <p className="text-blue-100 text-sm">Онлайн • {bot.specialization}</p>
+        </div>
+        <button
+          onClick={onClose}
+          className="text-white hover:text-gray-200 text-xl font-bold"
+        >
+          ×
+        </button>
       </div>
 
       {/* Messages */}
@@ -99,7 +165,7 @@ const ChatWindow = () => {
                   <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
                   <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
                 </div>
-                <span className="text-sm text-gray-500">TOMORU AI печатает...</span>
+                <span className="text-sm text-gray-500">{bot.name} печатает...</span>
               </div>
             </div>
           </div>

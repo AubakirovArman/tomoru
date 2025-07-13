@@ -3,6 +3,8 @@
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Navigation from '../../components/Navigation';
+import ChatWindow from '../../components/ChatWindow';
+import { handleAuthError, createAuthHeaders, isAuthenticated } from '../../lib/authUtils';
 
 interface Bot {
   id: number;
@@ -30,6 +32,8 @@ export default function Channels() {
   const [bots, setBots] = useState<Bot[]>([]);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingBot, setEditingBot] = useState<Bot | null>(null);
+  const [showChatModal, setShowChatModal] = useState(false);
+  const [chattingBot, setChattingBot] = useState<Bot | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [editForm, setEditForm] = useState({
@@ -48,8 +52,7 @@ export default function Channels() {
   const router = useRouter();
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
+    if (!isAuthenticated()) {
       router.push('/');
       return;
     }
@@ -59,12 +62,13 @@ export default function Channels() {
 
   const fetchBots = async () => {
     try {
-      const token = localStorage.getItem('token');
       const response = await fetch('/api/bots', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: createAuthHeaders()
       });
+
+      if (handleAuthError(response, router)) {
+        return;
+      }
 
       if (response.ok) {
         const data = await response.json();
@@ -93,10 +97,14 @@ export default function Channels() {
 
     if (bot.openaiId) {
       try {
-        const token = localStorage.getItem('token');
         const res = await fetch(`/api/assistant?id=${bot.openaiId}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+          headers: createAuthHeaders()
         });
+        
+        if (handleAuthError(res, router)) {
+          return;
+        }
+        
         if (res.ok) {
           const data = await res.json();
           const a = data.assistant;
@@ -130,6 +138,7 @@ export default function Channels() {
 
         const response = await fetch('/api/upload', {
           method: 'POST',
+          headers: createAuthHeaders(),
           body: formData,
         });
 
@@ -151,26 +160,27 @@ export default function Channels() {
     if (!editingBot) return;
 
     try {
-      const token = localStorage.getItem('token');
       const response = await fetch('/api/bots', {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: createAuthHeaders({
+          'Content-Type': 'application/json'
+        }),
         body: JSON.stringify({
           botId: editingBot.id,
           botConfig: editForm
         })
       });
 
+      if (handleAuthError(response, router)) {
+        return;
+      }
+
       if (editingBot.openaiId) {
-        await fetch('/api/assistant', {
+        const assistantResponse = await fetch('/api/assistant', {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
+          headers: createAuthHeaders({
+            'Content-Type': 'application/json'
+          }),
           body: JSON.stringify({
             assistantId: editingBot.openaiId,
             data: {
@@ -190,6 +200,10 @@ export default function Channels() {
             files: uploadedFiles.map(f => f.id)
           })
         });
+        
+        if (handleAuthError(assistantResponse, router)) {
+          return;
+        }
       }
 
       if (response.ok) {
@@ -214,21 +228,23 @@ export default function Channels() {
     }
     
     try {
-      const token = localStorage.getItem('token');
       const webhookUrl = `${window.location.origin}/api/telegram/webhook`;
       
       const response = await fetch('/api/telegram/setup', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: createAuthHeaders({
+          'Content-Type': 'application/json'
+        }),
         body: JSON.stringify({
           botId,
           telegramBotToken,
           webhookUrl
         })
       });
+      
+      if (handleAuthError(response, router)) {
+        return;
+      }
       
       if (response.ok) {
         await fetchBots(); // Обновляем список
@@ -290,6 +306,16 @@ export default function Channels() {
     } catch (error) {
       console.error('Error deleting bot:', error);
     }
+  };
+
+  const handleOpenChat = (bot: Bot) => {
+    setChattingBot(bot);
+    setShowChatModal(true);
+  };
+
+  const handleCloseChat = () => {
+    setShowChatModal(false);
+    setChattingBot(null);
   };
 
   const getSpecializationIcon = (specialization: string) => {
@@ -390,10 +416,16 @@ export default function Channels() {
 
                     <div className="flex space-x-2">
                       <button 
+                        onClick={() => handleOpenChat(bot)}
+                        className="flex-1 bg-green-50 hover:bg-green-100 text-green-600 px-3 py-2 rounded text-sm transition-colors"
+                      >
+                        💬 Чат
+                      </button>
+                      <button 
                         onClick={() => handleEditBot(bot)}
                         className="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-600 px-3 py-2 rounded text-sm transition-colors"
                       >
-                        Редактировать
+                        ✏️
                       </button>
                       <button 
                         onClick={() => handleDeleteBot(bot.id)}
@@ -669,6 +701,15 @@ export default function Channels() {
                 Сохранить
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Chat Modal */}
+      {showChatModal && chattingBot && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-4xl h-[80vh]">
+            <ChatWindow bot={chattingBot} onClose={handleCloseChat} />
           </div>
         </div>
       )}

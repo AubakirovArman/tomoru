@@ -22,16 +22,28 @@ interface Bot {
 }
 
 interface ChatWindowProps {
-  bot: Bot;
-  onClose: () => void;
+  bot?: Bot;
+  onClose?: () => void;
 }
 
 const ChatWindow = ({ bot, onClose }: ChatWindowProps) => {
+  // Значения по умолчанию для бота
+  const defaultBot: Bot = {
+    id: 0,
+    name: 'TOMORU AI',
+    description: 'Ваш персональный AI-ассистент.',
+    instructions: 'Помогаю пользователям с различными задачами.',
+    personality: 'Дружелюбный и полезный',
+    specialization: 'Общий помощник',
+    openaiId: null
+  };
+  
+  const currentBot = bot || defaultBot;
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 1,
-      text: `Привет! Я ${bot.name}. ${bot.description} Чем могу помочь?`,
+      text: `Привет! Я ${currentBot.name}. ${currentBot.description} Чем могу помочь?`,
       isUser: false,
       timestamp: new Date(),
     },
@@ -61,7 +73,7 @@ const ChatWindow = ({ bot, onClose }: ChatWindowProps) => {
           'Content-Type': 'application/json'
         }),
         body: JSON.stringify({
-          botId: bot.id,
+          botId: currentBot.id,
           message: userMessage.text,
           conversationHistory: messages.map(m => ({
             role: m.isUser ? 'user' : 'assistant',
@@ -118,15 +130,17 @@ const ChatWindow = ({ bot, onClose }: ChatWindowProps) => {
       {/* Chat Header */}
       <div className="bg-blue-600 text-white p-4 rounded-t-lg flex justify-between items-center">
         <div>
-          <h3 className="text-lg font-semibold">💬 Чат с {bot.name}</h3>
-          <p className="text-blue-100 text-sm">Онлайн • {bot.specialization}</p>
+          <h3 className="text-lg font-semibold">💬 Чат с {currentBot.name}</h3>
+          <p className="text-blue-100 text-sm">Онлайн • {currentBot.specialization}</p>
         </div>
-        <button
-          onClick={onClose}
-          className="text-white hover:text-gray-200 text-xl font-bold"
-        >
-          ×
-        </button>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="text-white hover:text-gray-200 text-xl font-bold"
+          >
+            ×
+          </button>
+        )}
       </div>
 
       {/* Messages */}
@@ -165,7 +179,7 @@ const ChatWindow = ({ bot, onClose }: ChatWindowProps) => {
                   <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
                   <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
                 </div>
-                <span className="text-sm text-gray-500">{bot.name} печатает...</span>
+                <span className="text-sm text-gray-500">{currentBot.name} печатает...</span>
               </div>
             </div>
           </div>

@@ -15,6 +15,7 @@ const Navigation = () => {
     { href: '/channels', label: 'Каналы', icon: '📺' },
     { href: '/tables', label: 'Таблицы', icon: '📋' },
     { href: '/knowledge', label: 'Базы знаний', icon: '📚' },
+    { href: '/bot-templates', label: 'Шаблоны ботов', icon: '🛍️' },
     { href: '/add-bot', label: 'Добавить бота', icon: '🤖' },
   ];
 

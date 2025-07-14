@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getBotFatherAssistant, openai } from '@/lib/assistant';
+import { getBotFatherAssistant, getHRBotFatherAssistant, openai } from '@/lib/assistant';
 import { prisma } from '@/lib/prisma';
 import { verifyToken } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
   try {
-    const { message, threadId, files } = await request.json();
+    const { message, threadId, files, template } = await request.json();
 
     let thread;
     if (threadId) {
@@ -52,10 +52,14 @@ export async function POST(request: NextRequest) {
       })
     });
 
-    // Получаем ассистента "Бот-Отец"
+    // Получаем ассистента в зависимости от шаблона
     let assistant;
     try {
-      assistant = await getBotFatherAssistant();
+      if (template === 'hr-recruiter') {
+        assistant = await getHRBotFatherAssistant();
+      } else {
+        assistant = await getBotFatherAssistant();
+      }
     } catch (error) {
       console.error('Error with assistant:', error);
       return NextResponse.json(

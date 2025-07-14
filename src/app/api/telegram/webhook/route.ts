@@ -9,6 +9,7 @@ interface TelegramUpdate {
     from: {
       id: number;
       first_name: string;
+      last_name?: string;
       username?: string;
     };
     chat: {
@@ -52,6 +53,24 @@ export async function POST(request: NextRequest) {
     const userMessage = message.text;
     const chatId = message.chat.id;
     
+    // Создаем или обновляем Telegram пользователя
+    const telegramUser = await prisma.telegramUser.upsert({
+      where: {
+        telegramId: BigInt(message.from.id)
+      },
+      update: {
+        username: message.from.username || null,
+        firstName: message.from.first_name,
+        lastName: message.from.last_name || null
+      },
+      create: {
+        telegramId: BigInt(message.from.id),
+        username: message.from.username || null,
+        firstName: message.from.first_name,
+        lastName: message.from.last_name || null
+      }
+    });
+    
     // Получаем ассистента OpenAI
     if (!bot.openaiId) {
       await sendTelegramMessage(botToken, chatId, 'Бот не настроен правильно. Обратитесь к администратору.');
@@ -61,6 +80,18 @@ export async function POST(request: NextRequest) {
     try {
       // Создаем thread для пользователя (можно кэшировать по chatId)
       const thread = await openai.beta.threads.create();
+      
+      // Сохраняем сообщение пользователя в базу данных
+      await prisma.message.create({
+        data: {
+          content: userMessage,
+          messageType: 'USER',
+          botId: bot.id,
+          telegramUserId: telegramUser.id,
+          telegramMessageId: BigInt(message.message_id),
+          threadId: thread.id
+        }
+      });
       
       // Добавляем сообщение пользователя
       await openai.beta.threads.messages.create(thread.id, {
@@ -92,7 +123,23 @@ export async function POST(request: NextRequest) {
         
         if (assistantMessage.content[0].type === 'text') {
           const responseText = assistantMessage.content[0].text.value;
-          await sendTelegramMessage(botToken, chatId, responseText);
+          
+          // Отправляем ответ в Telegram
+          const sentMessage = await sendTelegramMessage(botToken, chatId, responseText);
+          
+          // Сохраняем ответ бота в базу данных
+          if (sentMessage) {
+            await prisma.message.create({
+              data: {
+                content: responseText,
+                messageType: 'BOT',
+                botId: bot.id,
+                telegramUserId: telegramUser.id,
+                telegramMessageId: BigInt(sentMessage.message_id),
+                threadId: thread.id
+              }
+            });
+          }
         }
       } else {
         await sendTelegramMessage(botToken, chatId, 'Произошла ошибка при обработке запроса.');
@@ -128,8 +175,13 @@ async function sendTelegramMessage(botToken: string, chatId: number, text: strin
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Failed to send Telegram message:', errorText);
+      return null;
     }
+    
+    const result = await response.json();
+    return result.result; // Возвращаем информацию об отправленном сообщении
   } catch (error) {
     console.error('Error sending Telegram message:', error);
+    return null;
   }
 }

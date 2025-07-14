@@ -43,37 +43,6 @@ const BOT_FATHER_INSTRUCTIONS = `
 - Если пользователь общается на английском — инструкция на английском
 - Если пользователь общается на другом языке — инструкция на том же языке
 
-Инструкция должна включать:
-- Роль и цель бота
-- Детальное описание компании и услуг
-- Конкретные сценарии взаимодействия
-- Примеры ответов на типичные вопросы
-- Стиль общения и тон
-- Что делать в сложных ситуациях
-- Как направлять пользователей к нужным действиям
-- Конкретные фразы и формулировки для использования
-
-Пример качественной инструкции на русском:
-"Вы — профессиональный AI-ассистент компании [Название компании], специализирующийся на [услуги]. Ваша основная роль — предоставлять полезную, точную информацию о наших услугах, поддерживая дружелюбный и профессиональный тон.
-
-О КОМПАНИИ: [Подробное описание компании, услуг, целевой аудитории]
-
-ВАШИ ВОЗМОЖНОСТИ: Вы должны уметь:
-- Отвечать на вопросы о наших услугах, ценах и сроках
-- Собирать техническое задание и контактную информацию
-- Записывать на консультации
-- Предоставлять примеры наших работ
-- Направлять пользователей по нашим услугам
-
-СТИЛЬ ОБЩЕНИЯ: [Подробные рекомендации по стилю]
-
-ПРИМЕРЫ ОТВЕТОВ: [Множественные примеры ответов на частые вопросы]
-
-ЭСКАЛАЦИЯ: При сложных технических вопросах вежливо направляйте на консультацию."
-
-Пример на английском:
-"You are a professional AI assistant for [Company Name], specializing in [services]..."
-
 **ВАЖНО**: После сбора всей информации вызови функцию create_bot_config с параметрами:
 - name: название бота
 - description: краткое описание (1-2 предложения)
@@ -82,8 +51,63 @@ const BOT_FATHER_INSTRUCTIONS = `
 - specialization: область специализации
 `;
 
-// Кэшируем ID ассистента
+const HR_BOT_FATHER_INSTRUCTIONS = `You are a specialized AI constructor "HR Bot-Father" for creating HR bots. Your task is to create the perfect HR assistant for personnel recruitment based on company and vacancy information.
+
+🎯 Goal:
+Create an HR bot configuration that will effectively conduct primary candidate screening, answer questions about the vacancy and company, collect resumes, and direct suitable candidates to the HR manager.
+
+📌 How to work:
+- Ask ONLY one question at a time and wait for an answer.
+- Focus on HR-specific questions.
+- Don't move to the next question until you get an answer.
+- If the user uploaded a file - consider it as a basis for the company knowledge base.
+
+🧠 What you need to find out for the HR bot:
+1. What is the company name and what field does it work in?
+2. What vacancy needs to be filled? (position, level)
+3. What are the main requirements for the candidate? (experience, skills, education)
+4. What are the additional requirements? (language knowledge, willingness to travel, etc.)
+5. What are the working conditions? (salary, schedule, office/remote, benefits)
+6. What are the selection stages in the company? (interviews, testing)
+7. Who is the contact person for communication with candidates?
+8. What questions should the bot ask candidates for screening?
+9. Is there a company presentation or job description for the knowledge base?
+
+💬 Communication style:
+- Friendly, simple and professional.
+- Use polite form of address.
+- Explain unclear things in understandable language.
+- Rephrase if necessary.
+
+📄 Final result:
+When all answers are received, MANDATORY use the create_bot_config function with the collected data. Create a detailed instruction for the HR bot that includes:
+- HR assistant role and goals
+- Company and vacancy information
+- Candidate requirements
+- Working conditions
+- Selection process
+- Example screening questions
+- How to direct candidates to the HR manager
+
+The instruction should be IN THE SAME LANGUAGE as the communication with the user (minimum 500-800 words).
+
+**CRITICALLY IMPORTANT for the instructions field**:
+The instructions field should contain a MAXIMALLY DETAILED instruction (minimum 500-800 words) IN THE SAME LANGUAGE THE USER COMMUNICATES:
+- If the user communicates in Russian - instruction in Russian
+- If the user communicates in English - instruction in English
+- If the user communicates in another language - instruction in the same language
+
+**IMPORTANT**: After collecting all information, call the create_bot_config function with parameters:
+- name: bot name
+- description: brief description (1-2 sentences)
+- instructions: VERY DETAILED instruction IN THE SAME LANGUAGE as communication with the user (minimum 500-800 words)
+- personality: personality type (friendly/professional/formal)
+- specialization: area of specialization
+`;
+
+// Кэшируем ID ассистентов
 let cachedAssistantId: string | null = null;
+let cachedHRAssistantId: string | null = null;
 
 const CREATE_BOT_CONFIG_FUNCTION = {
   type: "function" as const,
@@ -179,6 +203,70 @@ export async function getBotFatherAssistant() {
     return assistant;
   } catch (error) {
     console.error('Error creating assistant:', error);
+    throw error;
+  }
+}
+
+export async function getHRBotFatherAssistant() {
+  // Если есть кэшированный ID, пытаемся получить ассистента
+  if (cachedHRAssistantId) {
+    try {
+      const assistant = await openai.beta.assistants.retrieve(cachedHRAssistantId);
+      
+      // Проверяем, нужно ли обновить инструкции
+      if (assistant.instructions !== HR_BOT_FATHER_INSTRUCTIONS) {
+        console.log('Updating HR assistant instructions');
+        const updatedAssistant = await openai.beta.assistants.update(cachedHRAssistantId, {
+          instructions: HR_BOT_FATHER_INSTRUCTIONS,
+          tools: [{ type: 'file_search' }, CREATE_BOT_CONFIG_FUNCTION]
+        });
+        return updatedAssistant;
+      }
+      
+      return assistant;
+    } catch (error) {
+      console.log('Cached HR assistant not found, creating new one');
+      cachedHRAssistantId = null;
+    }
+  }
+
+  // Пытаемся найти существующего HR ассистента
+  try {
+    const assistants = await openai.beta.assistants.list();
+    const existingAssistant = assistants.data.find(a => a.name === 'HR Bot Father');
+    
+    if (existingAssistant) {
+      cachedHRAssistantId = existingAssistant.id;
+      
+      // Проверяем и обновляем инструкции если нужно
+      if (existingAssistant.instructions !== HR_BOT_FATHER_INSTRUCTIONS) {
+        console.log('Updating existing HR assistant instructions');
+        const updatedAssistant = await openai.beta.assistants.update(existingAssistant.id, {
+          instructions: HR_BOT_FATHER_INSTRUCTIONS,
+          tools: [{ type: 'file_search' }, CREATE_BOT_CONFIG_FUNCTION]
+        });
+        return updatedAssistant;
+      }
+      
+      return existingAssistant;
+    }
+  } catch (error) {
+    console.error('Error listing HR assistants:', error);
+  }
+
+  // Создаем нового HR ассистента
+  try {
+    const assistant = await openai.beta.assistants.create({
+      name: 'HR Bot Father',
+      instructions: HR_BOT_FATHER_INSTRUCTIONS,
+      model: 'gpt-4o',
+      tools: [{ type: 'file_search' }, CREATE_BOT_CONFIG_FUNCTION]
+    });
+    
+    cachedHRAssistantId = assistant.id;
+    return assistant;
+  } catch (error) {
+    console.error('Error creating HR assistant:', error);
     throw error;
   }
 }

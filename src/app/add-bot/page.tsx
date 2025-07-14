@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Navigation from '@/components/Navigation';
 
 interface Message {
@@ -29,6 +29,7 @@ interface BotConfig {
 
 export default function AddBotPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
@@ -51,18 +52,31 @@ export default function AddBotPage() {
 
     // Инициализация чата с ботом-отцом
     const initChat = async () => {
-      const welcomeMessage: Message = {
-        id: 1,
-        text: 'Привет! Я Бот-Отец 🤖👨‍💻\n\nЯ помогу тебе создать идеального AI ассистента! Давай начнем с простого вопроса:\n\n🎯 **Какую основную задачу должен решать твой бот?**\n\nНапример:\n• Помощь клиентам в поддержке\n• Анализ данных и отчеты\n• Обучение и консультации\n• Автоматизация процессов\n• Что-то еще?',
-        isUser: false,
-        timestamp: new Date()
-      };
+      const template = searchParams.get('template');
+      let welcomeMessage: Message;
+
+      if (template === 'hr-recruiter') {
+        welcomeMessage = {
+          id: 1,
+          text: 'Привет! Я специализированный HR Бот-Отец 🧑‍💼👨‍💻\n\nЯ помогу тебе создать идеального HR-бота для найма персонала! У меня есть готовый шаблон, но давай его настроим под твою компанию.\n\n🏢 **Расскажи о своей компании:**\n\n• Как называется компания?\n• В какой сфере работаете?\n• Какую вакансию нужно закрыть?\n• Какие основные требования к кандидату?\n\nЭта информация поможет мне создать персонализированного HR-ассистента для твоей компании.',
+          isUser: false,
+          timestamp: new Date()
+        };
+      } else {
+        welcomeMessage = {
+          id: 1,
+          text: 'Привет! Я Бот-Отец 🤖👨‍💻\n\nЯ помогу тебе создать идеального AI ассистента! Давай начнем с простого вопроса:\n\n🎯 **Какую основную задачу должен решать твой бот?**\n\nНапример:\n• Помощь клиентам в поддержке\n• Анализ данных и отчеты\n• Обучение и консультации\n• Автоматизация процессов\n• Что-то еще?',
+          isUser: false,
+          timestamp: new Date()
+        };
+      }
+      
       setMessages([welcomeMessage]);
       setLoading(false);
     };
 
     initChat();
-  }, [router]);
+  }, [router, searchParams]);
 
   useEffect(() => {
     // Автоскролл к последнему сообщению
@@ -134,7 +148,8 @@ export default function AddBotPage() {
         body: JSON.stringify({
           message: inputText,
           threadId,
-          files: uploadedFiles.map(f => f.id)
+          files: uploadedFiles.map(f => f.id),
+          template: searchParams.get('template')
         })
       });
 
@@ -247,10 +262,24 @@ export default function AddBotPage() {
             {/* Chat Header */}
             <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white p-4 rounded-t-lg">
               <h3 className="text-lg font-semibold flex items-center">
-                <span className="mr-2">👨‍💻</span>
-                Бот-Отец
+                {searchParams.get('template') === 'hr-recruiter' ? (
+                  <>
+                    <span className="mr-2">🧑‍💼</span>
+                    HR Бот-Отец
+                  </>
+                ) : (
+                  <>
+                    <span className="mr-2">👨‍💻</span>
+                    Бот-Отец
+                  </>
+                )}
               </h3>
-              <p className="text-purple-100 text-sm">Специалист по созданию AI ассистентов</p>
+              <p className="text-purple-100 text-sm">
+                {searchParams.get('template') === 'hr-recruiter' 
+                  ? 'Специалист по созданию HR-ботов для найма персонала'
+                  : 'Специалист по созданию AI ассистентов'
+                }
+              </p>
             </div>
 
             {/* Messages */}
@@ -298,7 +327,12 @@ export default function AddBotPage() {
                         <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
                         <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
                       </div>
-                      <span className="text-sm text-gray-500">Бот-Отец думает...</span>
+                      <span className="text-sm text-gray-500">
+                        {searchParams.get('template') === 'hr-recruiter' 
+                          ? 'HR Бот-Отец думает...'
+                          : 'Бот-Отец думает...'
+                        }
+                      </span>
                     </div>
                   </div>
                 </div>

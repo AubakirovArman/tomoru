@@ -35,8 +35,44 @@ model Bot {
   telegramEnabled    Boolean  @default(false) // Включена ли Telegram интеграция
   userId             Int
   user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages           Message[]
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
   @@map("bots")
+}
+
+model TelegramUser {
+  id           Int       @id @default(autoincrement())
+  telegramId   BigInt    @unique // ID пользователя в Telegram
+  username     String?   // Username в Telegram
+  firstName    String    // Имя пользователя
+  lastName     String?   // Фамилия пользователя
+  messages     Message[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("telegram_users")
+}
+
+model Message {
+  id             Int          @id @default(autoincrement())
+  content        String       // Содержимое сообщения
+  messageType    MessageType  // Тип сообщения (user, bot, system)
+  botId          Int          // ID бота
+  bot            Bot          @relation(fields: [botId], references: [id], onDelete: Cascade)
+  telegramUserId Int?         // ID Telegram пользователя (может быть null для системных сообщений)
+  telegramUser   TelegramUser? @relation(fields: [telegramUserId], references: [id], onDelete: SetNull)
+  telegramMessageId BigInt?   // ID сообщения в Telegram
+  threadId       String?      // ID треда OpenAI (для группировки диалогов)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@map("messages")
+}
+
+enum MessageType {
+  USER
+  BOT
+  SYSTEM
 }

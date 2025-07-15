@@ -40,10 +40,14 @@ export async function POST(request: NextRequest) {
       thread = await openai.beta.threads.create();
     }
 
-    // Добавляем сообщение пользователя
+    // Добавляем сообщение пользователя с инструкцией отвечать на том же языке
+    const messageWithLanguageInstruction = `${message}
+
+[IMPORTANT INSTRUCTION: Always respond in the same language as the user's message above. If the user writes in Russian - respond in Russian, if in English - respond in English, if in another language - respond in that same language.]`;
+    
     await openai.beta.threads.messages.create(thread.id, {
       role: 'user',
-      content: message,
+      content: messageWithLanguageInstruction,
       ...(files && files.length > 0 && {
         attachments: files.map((fileId: string) => ({
           file_id: fileId,
@@ -250,13 +254,24 @@ export async function PUT(request: NextRequest) {
       try {
         console.log('Creating vector store for files:', files);
         
-        // Создаем vector store через основной API
-        const vectorStore = await openai.vectorStores.create({
-          name: `Files for ${botConfig.name || 'Assistant'}`,
-          file_ids: files
+        // Создаем vector store через beta API
+        const vectorStore = await (openai as any).beta.vectorStores.create({
+          name: `Files for ${botConfig.name || 'Assistant'}`
         });
         
         console.log('Created vector store:', vectorStore.id);
+        
+        // Добавляем файлы в vector store
+        for (const fileId of files) {
+          try {
+            await (openai as any).beta.vectorStores.files.create(vectorStore.id, {
+              file_id: fileId
+            });
+            console.log('Added file to vector store:', fileId);
+          } catch (fileError) {
+            console.error('Error adding file to vector store:', fileError);
+          }
+        }
         
         // Настраиваем tool_resources для file_search
         assistantConfig.tool_resources = {

@@ -43,10 +43,14 @@ export async function POST(request: NextRequest) {
       // Создаем thread для разговора
       const thread = await openai.beta.threads.create();
       
-      // Добавляем сообщение пользователя
+      // Добавляем сообщение пользователя с инструкцией отвечать на том же языке
+      const messageWithLanguageInstruction = `${message}
+
+[IMPORTANT INSTRUCTION: Always respond in the same language as the user's message above. If the user writes in Russian - respond in Russian, if in English - respond in English, if in another language - respond in that same language.]`;
+      
       await openai.beta.threads.messages.create(thread.id, {
         role: 'user',
-        content: message
+        content: messageWithLanguageInstruction
       });
       
       // Создаем run для выполнения

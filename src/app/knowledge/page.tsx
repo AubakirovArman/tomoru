@@ -1,29 +1,30 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Navigation from '../../components/Navigation';
 
 interface KnowledgeBase {
-  id: number;
+  id: string;
   name: string;
   description: string;
   category: 'technical' | 'business' | 'general' | 'ai';
+  status: 'ready' | 'training' | 'active';
   documents: number;
-  size: string;
-  lastUpdated: string;
-  status: 'active' | 'training' | 'ready';
   accuracy: number;
   usage: number;
+  size: string;
+  lastUpdated: string;
+  vectorStoreId?: string;
 }
 
 interface Document {
-  id: number;
-  title: string;
-  type: 'pdf' | 'txt' | 'md' | 'doc';
+  id: string;
+  name: string;
+  type: string;
   size: string;
   uploadDate: string;
-  processed: boolean;
+  status: string;
 }
 
 export default function Knowledge() {
@@ -31,13 +32,44 @@ export default function Knowledge() {
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [selectedKB, setSelectedKB] = useState<KnowledgeBase | null>(null);
   const [documents, setDocuments] = useState<Document[]>([]);
+  const [uploading, setUploading] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [newKB, setNewKB] = useState({
     name: '',
     description: '',
     category: 'general' as 'technical' | 'business' | 'general' | 'ai'
   });
   const router = useRouter();
+
+  // Загрузка баз знаний
+  const fetchKnowledgeBases = async () => {
+    try {
+      const response = await fetch('/api/knowledge');
+      if (response.ok) {
+        const data = await response.json();
+        setKnowledgeBases(data.knowledgeBases || []);
+      }
+    } catch (error) {
+      console.error('Error fetching knowledge bases:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Загрузка документов для выбранной базы знаний
+  const fetchDocuments = async (knowledgeBaseId: string) => {
+    try {
+      const response = await fetch(`/api/knowledge/documents?knowledgeBaseId=${knowledgeBaseId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setDocuments(data.documents || []);
+      }
+    } catch (error) {
+      console.error('Error fetching documents:', error);
+    }
+  };
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -46,60 +78,7 @@ export default function Knowledge() {
       return;
     }
 
-    // Симуляция загрузки баз знаний
-    const mockKnowledgeBases: KnowledgeBase[] = [
-      {
-        id: 1,
-        name: 'Техническая документация',
-        description: 'Руководства по API, SDK и техническим процессам',
-        category: 'technical',
-        documents: 127,
-        size: '45.2 MB',
-        lastUpdated: '2 часа назад',
-        status: 'ready',
-        accuracy: 94,
-        usage: 1247
-      },
-      {
-        id: 2,
-        name: 'Бизнес-процессы',
-        description: 'Описание рабочих процессов и политик компании',
-        category: 'business',
-        documents: 89,
-        size: '23.8 MB',
-        lastUpdated: '1 день назад',
-        status: 'active',
-        accuracy: 87,
-        usage: 892
-      },
-      {
-        id: 3,
-        name: 'AI и машинное обучение',
-        description: 'Исследования, статьи и документация по AI',
-        category: 'ai',
-        documents: 234,
-        size: '78.5 MB',
-        lastUpdated: '3 дня назад',
-        status: 'training',
-        accuracy: 91,
-        usage: 567
-      },
-      {
-        id: 4,
-        name: 'Общие знания',
-        description: 'Справочная информация и FAQ',
-        category: 'general',
-        documents: 156,
-        size: '34.1 MB',
-        lastUpdated: '1 неделя назад',
-        status: 'ready',
-        accuracy: 89,
-        usage: 1456
-      }
-    ];
-
-    setKnowledgeBases(mockKnowledgeBases);
-    setLoading(false);
+    fetchKnowledgeBases();
   }, [router]);
 
   const getCategoryIcon = (category: string) => {
@@ -131,75 +110,117 @@ export default function Knowledge() {
     }
   };
 
-  const handleViewKB = (kb: KnowledgeBase) => {
-    setSelectedKB(kb);
+  // Создание новой базы знаний
+  const handleCreateKB = async () => {
+    if (!newKB.name.trim()) return;
     
-    // Симуляция загрузки документов
-    const mockDocuments: Document[] = [
-      {
-        id: 1,
-        title: 'API Reference Guide',
-        type: 'pdf',
-        size: '2.3 MB',
-        uploadDate: '2024-01-05',
-        processed: true
-      },
-      {
-        id: 2,
-        title: 'Getting Started Tutorial',
-        type: 'md',
-        size: '156 KB',
-        uploadDate: '2024-01-03',
-        processed: true
-      },
-      {
-        id: 3,
-        title: 'Advanced Configuration',
-        type: 'txt',
-        size: '89 KB',
-        uploadDate: '2024-01-01',
-        processed: false
-      },
-      {
-        id: 4,
-        title: 'Troubleshooting Guide',
-        type: 'doc',
-        size: '1.1 MB',
-        uploadDate: '2023-12-28',
-        processed: true
+    try {
+      const response = await fetch('/api/knowledge', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newKB),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setKnowledgeBases(prev => [...prev, data.knowledgeBase]);
+        setNewKB({ name: '', description: '', category: 'general' });
+        setShowCreateModal(false);
       }
-    ];
-    
-    setDocuments(mockDocuments);
+    } catch (error) {
+      console.error('Error creating knowledge base:', error);
+    }
   };
 
-  const handleCreateKB = () => {
-    if (!newKB.name.trim()) return;
+  // Просмотр базы знаний
+  const handleViewKB = (kb: KnowledgeBase) => {
+    setSelectedKB(kb);
+    if (kb.id) {
+      fetchDocuments(kb.id);
+    }
+  };
 
-    const kb: KnowledgeBase = {
-      id: Date.now(),
-      name: newKB.name,
-      description: newKB.description,
-      category: newKB.category,
-      documents: 0,
-      size: '0 KB',
-      lastUpdated: 'Только что',
-      status: 'active',
-      accuracy: 0,
-      usage: 0
-    };
+  // Загрузка файла
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !selectedKB?.id) return;
 
-    setKnowledgeBases(prev => [kb, ...prev]);
-    setNewKB({ name: '', description: '', category: 'general' });
-    setShowCreateModal(false);
+    setUploading(true);
+    
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('knowledgeBaseId', selectedKB.id);
+      
+      const response = await fetch('/api/knowledge/documents', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setDocuments(prev => [...prev, data.document]);
+        // Обновляем счетчик документов в базе знаний
+        setSelectedKB(prev => prev ? { ...prev, documents: prev.documents + 1 } : null);
+        setKnowledgeBases(prev => 
+          prev.map(kb => 
+            kb.id === selectedKB.id 
+              ? { ...kb, documents: kb.documents + 1 }
+              : kb
+          )
+        );
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Ошибка загрузки файла');
+      }
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      alert('Ошибка загрузки файла');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  // Удаление документа
+  const handleDeleteDocument = async (document: Document) => {
+    if (!confirm('Вы уверены, что хотите удалить этот документ?')) return;
+    
+    try {
+      const response = await fetch(
+        `/api/knowledge/documents?fileId=${document.id}&knowledgeBaseId=${selectedKB?.id}`,
+        { method: 'DELETE' }
+      );
+      
+      if (response.ok) {
+        setDocuments(prev => prev.filter(doc => doc.id !== document.id));
+        // Обновляем счетчик документов
+        setSelectedKB(prev => prev ? { ...prev, documents: prev.documents - 1 } : null);
+        setKnowledgeBases(prev => 
+          prev.map(kb => 
+            kb.id === selectedKB?.id 
+              ? { ...kb, documents: kb.documents - 1 }
+              : kb
+          )
+        );
+      }
+    } catch (error) {
+      console.error('Error deleting document:', error);
+      alert('Ошибка удаления документа');
+    }
   };
 
   const getFileIcon = (type: string) => {
-    switch (type) {
-      case 'pdf': return '📄';
+    switch (type.toLowerCase()) {
+      case 'pdf': return '📕';
       case 'txt': return '📝';
       case 'md': return '📋';
-      case 'doc': return '📃';
+      case 'doc':
+      case 'docx': return '📃';
       default: return '📄';
     }
   };
@@ -290,10 +311,23 @@ export default function Knowledge() {
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-xl font-semibold text-gray-800">📄 Документы</h3>
-                  <button className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2">
-                    <span>📤</span>
-                    <span>Загрузить документ</span>
-                  </button>
+                  <div className="flex space-x-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      onChange={handleFileUpload}
+                      accept=".pdf,.txt,.md,.doc,.docx"
+                      className="hidden"
+                    />
+                    <button 
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                      className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 disabled:opacity-50"
+                    >
+                      <span>📤</span>
+                      <span>{uploading ? 'Загрузка...' : 'Загрузить документ'}</span>
+                    </button>
+                  </div>
                 </div>
                 
                 <div className="space-y-3">
@@ -302,14 +336,14 @@ export default function Knowledge() {
                       <div className="flex items-center space-x-4">
                         <div className="text-2xl">{getFileIcon(doc.type)}</div>
                         <div>
-                          <h4 className="font-medium text-gray-800">{doc.title}</h4>
+                          <h4 className="font-medium text-gray-800">{doc.name}</h4>
                           <div className="flex items-center space-x-4 text-sm text-gray-500">
                             <span>Размер: {doc.size}</span>
                             <span>Загружен: {doc.uploadDate}</span>
                             <span className={`px-2 py-1 rounded-full text-xs ${
-                              doc.processed ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                              doc.status === 'processed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
                             }`}>
-                              {doc.processed ? 'Обработан' : 'В обработке'}
+                              {doc.status === 'processed' ? 'Обработан' : 'В обработке'}
                             </span>
                           </div>
                         </div>
@@ -321,7 +355,10 @@ export default function Knowledge() {
                         <button className="text-green-600 hover:text-green-800 transition-colors">
                           📥
                         </button>
-                        <button className="text-red-600 hover:text-red-800 transition-colors">
+                        <button 
+                          onClick={() => handleDeleteDocument(doc)}
+                          className="text-red-600 hover:text-red-800 transition-colors"
+                        >
                           🗑️
                         </button>
                       </div>

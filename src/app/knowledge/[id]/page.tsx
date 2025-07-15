@@ -160,6 +160,21 @@ export default function KnowledgeDetail() {
     }
   };
 
+  const handleDeleteKnowledgeBase = async () => {
+    if (!kbId || !confirm('Удалить эту базу знаний?')) return;
+
+    try {
+      const response = await fetch(`/api/knowledge?id=${kbId}`, { method: 'DELETE' });
+
+      if (response.ok) {
+        router.push('/knowledge');
+      }
+    } catch (error) {
+      console.error('Error deleting knowledge base:', error);
+      alert('Ошибка удаления базы знаний');
+    }
+  };
+
   const getFileIcon = (type: string) => {
     switch (type.toLowerCase()) {
       case 'pdf': return '📕';
@@ -216,12 +231,20 @@ export default function KnowledgeDetail() {
                   </span>
                 </div>
               </div>
-              <button
-                onClick={() => router.push('/knowledge')}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                ✕
-              </button>
+              <div className="flex space-x-2">
+                <button
+                  onClick={handleDeleteKnowledgeBase}
+                  className="text-red-600 hover:text-red-800 transition-colors"
+                >
+                  🗑️
+                </button>
+                <button
+                  onClick={() => router.push('/knowledge')}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -276,10 +299,20 @@ export default function KnowledgeDetail() {
                       <div className="flex items-center space-x-4 text-sm text-gray-500">
                         <span>Размер: {doc.size}</span>
                         <span>Загружен: {doc.uploadDate}</span>
-                        <span className={`px-2 py-1 rounded-full text-xs ${
-                          doc.status === 'processed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {doc.status === 'processed' ? 'Обработан' : 'В обработке'}
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs ${
+                            doc.status === 'processed'
+                              ? 'bg-green-100 text-green-800'
+                              : doc.status === 'failed'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-yellow-100 text-yellow-800'
+                          }`}
+                        >
+                          {doc.status === 'processed'
+                            ? 'Обработан'
+                            : doc.status === 'failed'
+                            ? 'Ошибка'
+                            : 'В обработке'}
                         </span>
                       </div>
                     </div>

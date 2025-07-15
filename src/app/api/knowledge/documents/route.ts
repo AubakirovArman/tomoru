@@ -36,6 +36,25 @@ interface Document {
   status: string;
 }
 
+// Простейшая функция конвертации HTML в Markdown
+function htmlToMarkdown(html: string): string {
+  return html
+    .replace(/\r?\n|\r/g, ' ')
+    .replace(/<h1[^>]*>(.*?)<\/h1>/gi, '# $1\n')
+    .replace(/<h2[^>]*>(.*?)<\/h2>/gi, '## $1\n')
+    .replace(/<h3[^>]*>(.*?)<\/h3>/gi, '### $1\n')
+    .replace(/<strong[^>]*>(.*?)<\/strong>/gi, '**$1**')
+    .replace(/<b[^>]*>(.*?)<\/b>/gi, '**$1**')
+    .replace(/<em[^>]*>(.*?)<\/em>/gi, '*$1*')
+    .replace(/<i[^>]*>(.*?)<\/i>/gi, '*$1*')
+    .replace(/<a[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gi, '[$2]($1)')
+    .replace(/<br\s*\/?>(?=\s*)/gi, '\n')
+    .replace(/<p[^>]*>(.*?)<\/p>/gi, '$1\n')
+    .replace(/<li[^>]*>(.*?)<\/li>/gi, '- $1\n')
+    .replace(/<[^>]*>/g, '')
+    .trim();
+}
+
 // GET - получить документы базы знаний
 export async function GET(request: NextRequest) {
   try {
@@ -137,12 +156,38 @@ export async function POST(request: NextRequest) {
     }
 
     const formData = await request.formData();
-    const file = formData.get('file') as File;
     const knowledgeBaseId = formData.get('knowledgeBaseId') as string;
+    const url = formData.get('url');
+    let file = formData.get('file') as File | null;
 
-    if (!file || !knowledgeBaseId) {
+    if (!knowledgeBaseId) {
       return NextResponse.json(
-        { error: 'File and knowledge base ID are required' },
+        { error: 'Knowledge base ID is required' },
+        { status: 400 }
+      );
+    }
+
+    if (url && typeof url === 'string' && url.length > 0) {
+      try {
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error('Failed to fetch URL');
+        }
+        const html = await response.text();
+        const markdown = htmlToMarkdown(html);
+        file = new File([markdown], 'document.md', { type: 'text/markdown' });
+      } catch (e) {
+        console.error('Error processing URL:', e);
+        return NextResponse.json(
+          { error: 'Failed to download or convert URL' },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (!file) {
+      return NextResponse.json(
+        { error: 'File is required' },
         { status: 400 }
       );
     }
@@ -170,6 +215,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const fileName = file.name;
     let document: Document;
 
     try {
@@ -188,7 +234,7 @@ export async function POST(request: NextRequest) {
 
       document = {
         id: uploadedFile.id,
-        name: file.name,
+        name: fileName,
         type: file.type.split('/')[1] || 'unknown',
         size: `${Math.round((file.size / 1024) * 100) / 100} KB`,
         uploadDate: new Date().toLocaleDateString('ru-RU'),
@@ -200,7 +246,7 @@ export async function POST(request: NextRequest) {
       const localId = `doc_${Date.now()}`;
       document = {
         id: localId,
-        name: file.name,
+        name: fileName,
         type: file.type.split('/')[1] || 'unknown',
         size: `${Math.round((file.size / 1024) * 100) / 100} KB`,
         uploadDate: new Date().toLocaleDateString('ru-RU'),

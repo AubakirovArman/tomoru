@@ -35,6 +35,7 @@ export default function KnowledgeDetail() {
   const [knowledgeBase, setKnowledgeBase] = useState<KnowledgeBase | null>(null);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [urlInput, setUrlInput] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const kbId = Array.isArray(params.id) ? params.id[0] : params.id;
@@ -158,6 +159,40 @@ export default function KnowledgeDetail() {
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
+    }
+  };
+
+  const handleUrlUpload = async () => {
+    if (!urlInput || !kbId) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('url', urlInput);
+      formData.append('knowledgeBaseId', kbId as string);
+
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/knowledge/documents', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setDocuments(prev => [...prev, data.document]);
+        setKnowledgeBase(prev => prev ? { ...prev, documents: prev.documents + 1 } : null);
+        setUrlInput('');
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Ошибка загрузки ссылки');
+      }
+    } catch (error) {
+      console.error('Error uploading url:', error);
+      alert('Ошибка загрузки ссылки');
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -300,26 +335,42 @@ export default function KnowledgeDetail() {
           </div>
 
           <div className="bg-white rounded-lg shadow-sm p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-semibold text-gray-800">📄 Документы</h3>
-              <div className="flex space-x-2">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  onChange={handleFileUpload}
-                  accept=".pdf,.txt,.md,.doc,.docx"
-                  className="hidden"
-                />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 disabled:opacity-50"
-                >
-                  <span>📤</span>
-                  <span>{uploading ? 'Загрузка...' : 'Загрузить документ'}</span>
-                </button>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-semibold text-gray-800">📄 Документы</h3>
+                <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    onChange={handleFileUpload}
+                    accept=".pdf,.txt,.md,.doc,.docx"
+                    className="hidden"
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 disabled:opacity-50"
+                  >
+                    <span>📤</span>
+                    <span>{uploading ? 'Загрузка...' : 'Загрузить документ'}</span>
+                  </button>
+                  <div className="flex space-x-2">
+                    <input
+                      type="text"
+                      value={urlInput}
+                      onChange={e => setUrlInput(e.target.value)}
+                      placeholder="URL"
+                      className="border rounded px-2 py-1 text-sm"
+                    />
+                    <button
+                      onClick={handleUrlUpload}
+                      disabled={uploading || !urlInput}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      🔗
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
 
             <div className="space-y-3">
               {documents.map((doc) => (

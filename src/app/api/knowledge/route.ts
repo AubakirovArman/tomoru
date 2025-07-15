@@ -23,8 +23,44 @@ interface KnowledgeBase {
 let localKnowledgeBases: KnowledgeBase[] = [];
 
 // GET - получить все базы знаний
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (id) {
+      try {
+        const store = await (openai as any).beta.vectorStores.retrieve(id);
+
+        const knowledgeBase: KnowledgeBase = {
+          id: store.id,
+          name: store.name || 'Unnamed Knowledge Base',
+          description: store.metadata?.description || 'No description',
+          category: (store.metadata?.category as any) || 'general',
+          status: store.status === 'completed' ? 'ready' : 'training',
+          documents: store.file_counts?.total || 0,
+          accuracy: 95,
+          usage: 0,
+          size: `${Math.round((store.usage_bytes || 0) / 1024 / 1024 * 100) / 100} MB`,
+          lastUpdated: new Date(store.created_at * 1000).toLocaleDateString('ru-RU'),
+          vectorStoreId: store.id
+        };
+
+        return NextResponse.json({ knowledgeBase });
+      } catch (vectorStoreError) {
+        console.log('Vector stores API not available, using local storage:', vectorStoreError);
+
+        const kb = localKnowledgeBases.find(kb => kb.id === id);
+        if (!kb) {
+          return NextResponse.json(
+            { error: 'Knowledge base not found' },
+            { status: 404 }
+          );
+        }
+        return NextResponse.json({ knowledgeBase: kb });
+      }
+    }
+
     // Пытаемся получить vector stores из OpenAI
     try {
       const vectorStores = await (openai as any).beta.vectorStores.list();

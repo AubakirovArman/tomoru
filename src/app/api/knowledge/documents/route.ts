@@ -44,7 +44,12 @@ export async function GET(request: NextRequest) {
               type: fileDetails.filename.split('.').pop() || 'unknown',
               size: `${Math.round(fileDetails.bytes / 1024 * 100) / 100} KB`,
               uploadDate: new Date(fileDetails.created_at * 1000).toLocaleDateString('ru-RU'),
-              status: file.status === 'completed' ? 'processed' : 'processing'
+              status:
+                file.status === 'completed'
+                  ? 'processed'
+                  : file.status === 'failed'
+                  ? 'failed'
+                  : 'processing'
             };
           } catch (error) {
             console.error('Error fetching file details:', error);

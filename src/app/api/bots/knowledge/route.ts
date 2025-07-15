@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyToken } from '@/lib/auth';
+import OpenAI from 'openai';
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 // GET - получить базы знаний для бота
 export async function GET(request: NextRequest) {
@@ -161,8 +166,39 @@ export async function POST(request: NextRequest) {
         knowledgeBaseId: parseInt(knowledgeBaseId)
       }
     });
-    
+
     console.log('Link created successfully:', relation);
+
+    // Привязываем vector store к ассистенту в OpenAI
+    if (bot.openaiId && knowledgeBase.vectorStoreId) {
+      try {
+        const assistant = await openai.beta.assistants.retrieve(bot.openaiId);
+
+        const existingVectorStores =
+          assistant.tool_resources?.file_search?.vector_store_ids || [];
+
+        const updatedVectorStores = Array.from(
+          new Set([...existingVectorStores, knowledgeBase.vectorStoreId])
+        );
+
+        let tools: any[] = assistant.tools || [];
+        if (!tools.some(t => t.type === 'file_search')) {
+          tools.push({ type: 'file_search' });
+        }
+
+        await openai.beta.assistants.update(bot.openaiId, {
+          tools,
+          tool_resources: {
+            file_search: { vector_store_ids: updatedVectorStores }
+          }
+        });
+      } catch (assistantError) {
+        console.error(
+          'Error attaching knowledge base to assistant:',
+          assistantError
+        );
+      }
+    }
 
     return NextResponse.json({
       success: true,
@@ -236,6 +272,45 @@ export async function DELETE(request: NextRequest) {
         { error: 'Relation not found' },
         { status: 404 }
       );
+    }
+
+    // Получаем информацию о базе знаний
+    const knowledgeBase = await prisma.knowledgeBase.findFirst({
+      where: {
+        id: parseInt(knowledgeBaseId),
+        userId: decoded.userId,
+      },
+    });
+
+    // Отвязываем vector store от ассистента в OpenAI
+    if (bot.openaiId && knowledgeBase?.vectorStoreId) {
+      try {
+        const assistant = await openai.beta.assistants.retrieve(bot.openaiId);
+
+        const existingVectorStores =
+          assistant.tool_resources?.file_search?.vector_store_ids || [];
+
+        const updatedVectorStores = existingVectorStores.filter(
+          (id: string) => id !== knowledgeBase.vectorStoreId
+        );
+
+        let tools: any[] = assistant.tools || [];
+        if (updatedVectorStores.length === 0) {
+          tools = tools.filter(t => t.type !== 'file_search');
+        }
+
+        await openai.beta.assistants.update(bot.openaiId, {
+          tools,
+          tool_resources: {
+            file_search: { vector_store_ids: updatedVectorStores },
+          },
+        });
+      } catch (assistantError) {
+        console.error(
+          'Error detaching knowledge base from assistant:',
+          assistantError
+        );
+      }
     }
 
     return NextResponse.json({

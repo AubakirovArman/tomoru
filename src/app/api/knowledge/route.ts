@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
 
     if (id) {
       try {
-        const store = await openai.vectorStores.retrieve(id);
+        const store = await (openai as any).beta.vectorStores.retrieve(id);
 
         const knowledgeBase: KnowledgeBase = {
           id: store.id,
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
 
     // Пытаемся получить vector stores из OpenAI
     try {
-      const vectorStores = await openai.vectorStores.list();
+      const vectorStores = await (openai as any).beta.vectorStores.list();
       
       const knowledgeBases: KnowledgeBase[] = vectorStores.data.map((store: any) => ({
         id: store.id,
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
 
     // Пытаемся создать vector store в OpenAI
     try {
-      const vectorStore = await openai.vectorStores.create({
+      const vectorStore = await (openai as any).beta.vectorStores.create({
         name,
         metadata: {
           description: description || 'No description',
@@ -179,7 +179,7 @@ export async function DELETE(request: NextRequest) {
 
     // Пытаемся удалить vector store из OpenAI
     try {
-      await openai.vectorStores.del(id);
+      await (openai as any).beta.vectorStores.del(id);
     } catch (vectorStoreError) {
       console.log('Vector stores API not available, removing from local storage:', vectorStoreError);
       // Удаляем из локального хранилища

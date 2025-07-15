@@ -255,7 +255,7 @@ export async function PUT(request: NextRequest) {
         console.log('Creating vector store for files:', files);
         
         // Создаем vector store через основной API
-        const vectorStore = await openai.vectorStores.create({
+        const vectorStore = await openai.beta.vectorStores.create({
           name: `Files for ${botConfig.name || 'Assistant'}`
         });
         
@@ -264,7 +264,7 @@ export async function PUT(request: NextRequest) {
         // Добавляем файлы в vector store
         for (const fileId of files) {
           try {
-            await openai.vectorStores.files.create(vectorStore.id, {
+            await openai.beta.vectorStores.files.create(vectorStore.id, {
               file_id: fileId
             });
             console.log('Added file to vector store:', fileId);

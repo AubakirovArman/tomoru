@@ -31,8 +31,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Пытаемся получить файлы из vector store
-     try {
-       const vectorStoreFiles = await (openai as any).beta.vectorStores.files.list(knowledgeBaseId);
+    try {
+      const vectorStoreFiles = await (openai as any).beta.vectorStores.files.list(
+        knowledgeBaseId
+      );
       
       const documents: Document[] = await Promise.all(
         vectorStoreFiles.data.map(async (file: any) => {
@@ -44,7 +46,12 @@ export async function GET(request: NextRequest) {
               type: fileDetails.filename.split('.').pop() || 'unknown',
               size: `${Math.round(fileDetails.bytes / 1024 * 100) / 100} KB`,
               uploadDate: new Date(fileDetails.created_at * 1000).toLocaleDateString('ru-RU'),
-              status: file.status === 'completed' ? 'processed' : 'processing'
+              status:
+                file.status === 'completed'
+                  ? 'processed'
+                  : file.status === 'failed'
+                  ? 'failed'
+                  : 'processing'
             };
           } catch (error) {
             console.error('Error fetching file details:', error);
@@ -109,9 +116,9 @@ export async function POST(request: NextRequest) {
       });
 
       // Добавляем файл в vector store
-       await (openai as any).beta.vectorStores.files.create(knowledgeBaseId, {
-         file_id: uploadedFile.id
-       });
+      await (openai as any).beta.vectorStores.files.create(knowledgeBaseId, {
+        file_id: uploadedFile.id
+      });
       
       document = {
         id: uploadedFile.id,
@@ -167,9 +174,9 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Пытаемся удалить файл из vector store
-     try {
-       await (openai as any).beta.vectorStores.files.del(knowledgeBaseId, fileId);
-       await (openai as any).files.del(fileId);
+    try {
+      await (openai as any).beta.vectorStores.files.del(knowledgeBaseId, fileId);
+      await (openai as any).files.del(fileId);
     } catch (vectorStoreError) {
       console.log('Vector stores API not available, removing from local storage:', vectorStoreError);
       // Удаляем из локального хранилища

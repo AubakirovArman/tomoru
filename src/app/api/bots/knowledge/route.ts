@@ -53,11 +53,11 @@ export async function GET(request: NextRequest) {
         botId: parseInt(botId)
       },
       include: {
-        KnowledgeBase: true
+        knowledgeBase: true
       }
     });
 
-    const knowledgeBases = botKnowledgeBases.map((bkb: any) => bkb.KnowledgeBase);
+    const knowledgeBases = botKnowledgeBases.map((bkb: any) => bkb.knowledgeBase);
 
     return NextResponse.json({
       knowledgeBases
@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Проверяем, что база знаний принадлежит пользователю
-    const knowledgeBase = await prisma.KnowledgeBase.findFirst({
+    const knowledgeBase = await prisma.knowledgeBase.findFirst({
       where: {
         id: parseInt(knowledgeBaseId),
         userId: decoded.userId

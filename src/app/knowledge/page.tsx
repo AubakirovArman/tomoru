@@ -117,6 +117,21 @@ export default function Knowledge() {
     }
   };
 
+  const handleDeleteKB = async (kb: KnowledgeBase) => {
+    if (!confirm('Вы уверены, что хотите удалить эту базу знаний?')) return;
+
+    try {
+      const response = await fetch(`/api/knowledge?id=${kb.id}`, { method: 'DELETE' });
+
+      if (response.ok) {
+        setKnowledgeBases(prev => prev.filter(item => item.id !== kb.id));
+      }
+    } catch (error) {
+      console.error('Error deleting knowledge base:', error);
+      alert('Ошибка удаления базы знаний');
+    }
+  };
+
 
   if (loading) {
     return (
@@ -204,6 +219,12 @@ export default function Knowledge() {
                       className="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-600 px-3 py-2 rounded text-sm transition-colors"
                     >
                       Открыть
+                    </button>
+                    <button
+                      onClick={() => handleDeleteKB(kb)}
+                      className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 px-3 py-2 rounded text-sm transition-colors"
+                    >
+                      Удалить
                     </button>
                   </div>
                 </div>

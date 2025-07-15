@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     
     for (const vectorStoreId of vectorStoreIds) {
       try {
-        const vectorStoreFiles = await openai.vectorStores.files.list(vectorStoreId);
+        const vectorStoreFiles = await openai.beta.vectorStores.files.list(vectorStoreId);
         
         if (vectorStoreFiles && vectorStoreFiles.data) {
           for (const vectorFile of vectorStoreFiles.data) {
@@ -84,7 +84,7 @@ export async function PUT(request: NextRequest) {
         console.log('OpenAI object keys:', Object.keys(openai));
         
         // Создаем vector store через основной API
-        const vectorStore = await openai.vectorStores.create({
+        const vectorStore = await openai.beta.vectorStores.create({
              name: `Files for ${data.name || 'Assistant'}`,
              file_ids: files
            });

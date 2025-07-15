@@ -41,10 +41,18 @@ export default function Knowledge() {
   // Загрузка баз знаний
   const fetchKnowledgeBases = async () => {
     try {
-      const response = await fetch('/api/knowledge');
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/knowledge', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       if (response.ok) {
         const data = await response.json();
         setKnowledgeBases(data.knowledgeBases || []);
+      } else if (response.status === 401) {
+        router.push('/');
+        return;
       }
     } catch (error) {
       console.error('Error fetching knowledge bases:', error);
@@ -98,10 +106,12 @@ export default function Knowledge() {
     if (!newKB.name.trim()) return;
     
     try {
+      const token = localStorage.getItem('token');
       const response = await fetch('/api/knowledge', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(newKB),
       });
@@ -111,6 +121,9 @@ export default function Knowledge() {
         setKnowledgeBases(prev => [...prev, data.knowledgeBase]);
         setNewKB({ name: '', description: '', category: 'general' });
         setShowCreateModal(false);
+      } else if (response.status === 401) {
+        router.push('/');
+        return;
       }
     } catch (error) {
       console.error('Error creating knowledge base:', error);
@@ -121,10 +134,19 @@ export default function Knowledge() {
     if (!confirm('Вы уверены, что хотите удалить эту базу знаний?')) return;
 
     try {
-      const response = await fetch(`/api/knowledge?id=${kb.id}`, { method: 'DELETE' });
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/knowledge?id=${kb.id}`, { 
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
 
       if (response.ok) {
         setKnowledgeBases(prev => prev.filter(item => item.id !== kb.id));
+      } else if (response.status === 401) {
+        router.push('/');
+        return;
       }
     } catch (error) {
       console.error('Error deleting knowledge base:', error);

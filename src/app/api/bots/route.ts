@@ -27,6 +27,13 @@ export async function GET(request: NextRequest) {
       where: {
         userId: decoded.userId
       },
+      include: {
+        knowledgeBases: {
+          include: {
+            knowledgeBase: true
+          }
+        }
+      },
       orderBy: {
         createdAt: 'desc'
       }

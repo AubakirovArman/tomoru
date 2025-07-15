@@ -41,10 +41,18 @@ export default function KnowledgeDetail() {
 
   const fetchKnowledgeBase = async () => {
     try {
-      const res = await fetch(`/api/knowledge?id=${kbId}`);
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/knowledge?id=${kbId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       if (res.ok) {
         const data = await res.json();
         setKnowledgeBase(data.knowledgeBase);
+      } else if (res.status === 401) {
+        router.push('/');
+        return;
       }
     } catch (err) {
       console.error('Error fetching knowledge base:', err);
@@ -53,10 +61,18 @@ export default function KnowledgeDetail() {
 
   const fetchDocuments = async () => {
     try {
-      const response = await fetch(`/api/knowledge/documents?knowledgeBaseId=${kbId}`);
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/knowledge/documents?knowledgeBaseId=${kbId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       if (response.ok) {
         const data = await response.json();
         setDocuments(data.documents || []);
+      } else if (response.status === 401) {
+        router.push('/');
+        return;
       }
     } catch (error) {
       console.error('Error fetching documents:', error);
@@ -117,8 +133,12 @@ export default function KnowledgeDetail() {
       formData.append('file', file);
       formData.append('knowledgeBaseId', kbId as string);
 
+      const token = localStorage.getItem('token');
       const response = await fetch('/api/knowledge/documents', {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
         body: formData,
       });
 
@@ -145,9 +165,15 @@ export default function KnowledgeDetail() {
     if (!confirm('Вы уверены, что хотите удалить этот документ?')) return;
 
     try {
+      const token = localStorage.getItem('token');
       const response = await fetch(
         `/api/knowledge/documents?fileId=${document.id}&knowledgeBaseId=${kbId}`,
-        { method: 'DELETE' }
+        { 
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
       );
 
       if (response.ok) {
@@ -164,7 +190,13 @@ export default function KnowledgeDetail() {
     if (!kbId || !confirm('Удалить эту базу знаний?')) return;
 
     try {
-      const response = await fetch(`/api/knowledge?id=${kbId}`, { method: 'DELETE' });
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/knowledge?id=${kbId}`, { 
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
 
       if (response.ok) {
         router.push('/knowledge');

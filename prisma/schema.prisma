@@ -11,13 +11,14 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  password  String
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  bots      Bot[]
+  id             Int             @id @default(autoincrement())
+  email          String          @unique
+  password       String
+  name           String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  bots           Bot[]
+  knowledgeBases KnowledgeBase[]
 
   @@map("users")
 }
@@ -36,6 +37,7 @@ model Bot {
   userId             Int
   user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages           Message[]
+  knowledgeBases     BotKnowledgeBase[]
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -69,6 +71,32 @@ model Message {
   updatedAt      DateTime     @updatedAt
 
   @@map("messages")
+}
+
+model KnowledgeBase {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  vectorStoreId String? // ID vector store в OpenAI
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bots        BotKnowledgeBase[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("knowledge_bases")
+}
+
+model BotKnowledgeBase {
+  id              Int           @id @default(autoincrement())
+  botId           Int
+  knowledgeBaseId Int
+  bot             Bot           @relation(fields: [botId], references: [id], onDelete: Cascade)
+  knowledgeBase   KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now())
+
+  @@unique([botId, knowledgeBaseId])
+  @@map("bot_knowledge_bases")
 }
 
 enum MessageType {

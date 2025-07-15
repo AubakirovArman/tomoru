@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { prisma } from '@/lib/prisma';
+import jwt from 'jsonwebtoken';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -22,75 +24,147 @@ interface KnowledgeBase {
 // Локальное хранилище для баз знаний (временное решение)
 let localKnowledgeBases: KnowledgeBase[] = [];
 
+// Функция для получения пользователя из токена
+function getUserFromToken(request: NextRequest): { userId: number } | null {
+  try {
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return null;
+    }
+    
+    const token = authHeader.substring(7);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret') as any;
+    return { userId: decoded.userId };
+  } catch (error) {
+    console.error('Error verifying token:', error);
+    return null;
+  }
+}
+
 // GET - получить все базы знаний
 export async function GET(request: NextRequest) {
   try {
+    const user = getUserFromToken(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
     if (id) {
+      // Проверяем, принадлежит ли база знаний пользователю
+      const dbKnowledgeBase = await prisma.KnowledgeBase.findFirst({
+        where: {
+          id: parseInt(id),
+          userId: user.userId
+        }
+      });
+
+      if (!dbKnowledgeBase) {
+        return NextResponse.json(
+          { error: 'Knowledge base not found or access denied' },
+          { status: 404 }
+        );
+      }
+
       try {
-        if (!openai.vectorStores) {
+        if (!openai.vectorStores || !dbKnowledgeBase.vectorStoreId) {
           throw new Error('Vector stores API not available');
         }
-        const store = await openai.vectorStores.retrieve(id);
+        const store = await (openai as any).vectorStores.retrieve(dbKnowledgeBase.vectorStoreId);
 
         const knowledgeBase: KnowledgeBase = {
-          id: store.id,
-          name: store.name || 'Unnamed Knowledge Base',
-          description: store.metadata?.description || 'No description',
-          category: (store.metadata?.category as any) || 'general',
+          id: dbKnowledgeBase.id.toString(),
+          name: dbKnowledgeBase.name,
+          description: dbKnowledgeBase.description || 'No description',
+          category: 'general',
           status: store.status === 'completed' ? 'ready' : 'training',
           documents: store.file_counts?.total || 0,
           accuracy: 95,
           usage: 0,
           size: `${Math.round((store.usage_bytes || 0) / 1024 / 1024 * 100) / 100} MB`,
-          lastUpdated: new Date(store.created_at * 1000).toLocaleDateString('ru-RU'),
+          lastUpdated: dbKnowledgeBase.updatedAt.toLocaleDateString('ru-RU'),
           vectorStoreId: store.id
         };
 
         return NextResponse.json({ knowledgeBase });
       } catch (vectorStoreError) {
-        console.log('Vector stores API not available, using local storage:', vectorStoreError);
+        console.log('Vector stores API not available, using database info:', vectorStoreError);
 
-        const kb = localKnowledgeBases.find(kb => kb.id === id);
-        if (!kb) {
-          return NextResponse.json(
-            { error: 'Knowledge base not found' },
-            { status: 404 }
-          );
+        const knowledgeBase: KnowledgeBase = {
+          id: dbKnowledgeBase.id.toString(),
+          name: dbKnowledgeBase.name,
+          description: dbKnowledgeBase.description || 'No description',
+          category: 'general',
+          status: 'ready',
+          documents: 0,
+          accuracy: 95,
+          usage: 0,
+          size: '0 MB',
+          lastUpdated: dbKnowledgeBase.updatedAt.toLocaleDateString('ru-RU'),
+          vectorStoreId: dbKnowledgeBase.vectorStoreId
+        };
+        return NextResponse.json({ knowledgeBase });
+      }
+    }
+
+    // Получаем базы знаний пользователя из базы данных
+    const dbKnowledgeBases = await prisma.KnowledgeBase.findMany({
+      where: {
+        userId: user.userId
+      },
+      orderBy: {
+        updatedAt: 'desc'
+      }
+    });
+
+    // Пытаемся получить дополнительную информацию из OpenAI vector stores
+    const knowledgeBases: KnowledgeBase[] = [];
+    
+    for (const dbKb of dbKnowledgeBases) {
+      try {
+        if (openai.vectorStores && dbKb.vectorStoreId) {
+          const store = await (openai as any).vectorStores.retrieve(dbKb.vectorStoreId);
+          
+          knowledgeBases.push({
+            id: dbKb.id.toString(),
+            name: dbKb.name,
+            description: dbKb.description || 'No description',
+            category: 'general',
+            status: store.status === 'completed' ? 'ready' : 'training',
+            documents: store.file_counts?.total || 0,
+            accuracy: 95,
+            usage: 0,
+            size: `${Math.round((store.usage_bytes || 0) / 1024 / 1024 * 100) / 100} MB`,
+            lastUpdated: dbKb.updatedAt.toLocaleDateString('ru-RU'),
+            vectorStoreId: store.id
+          });
+        } else {
+          throw new Error('Vector stores API not available');
         }
-        return NextResponse.json({ knowledgeBase: kb });
+      } catch (vectorStoreError) {
+        // Если не удается получить данные из OpenAI, используем данные из БД
+        knowledgeBases.push({
+          id: dbKb.id.toString(),
+          name: dbKb.name,
+          description: dbKb.description || 'No description',
+          category: 'general',
+          status: 'ready',
+          documents: 0,
+          accuracy: 95,
+          usage: 0,
+          size: '0 MB',
+          lastUpdated: dbKb.updatedAt.toLocaleDateString('ru-RU'),
+          vectorStoreId: dbKb.vectorStoreId
+        });
       }
     }
-
-    // Пытаемся получить vector stores из OpenAI
-    try {
-      if (!openai.vectorStores) {
-        throw new Error('Vector stores API not available');
-      }
-      const vectorStores = await openai.vectorStores.list();
-      
-      const knowledgeBases: KnowledgeBase[] = vectorStores.data.map((store: any) => ({
-        id: store.id,
-        name: store.name || 'Unnamed Knowledge Base',
-        description: store.metadata?.description || 'No description',
-        category: (store.metadata?.category as any) || 'general',
-        status: store.status === 'completed' ? 'ready' : 'training',
-        documents: store.file_counts?.total || 0,
-        accuracy: 95,
-        usage: 0,
-        size: `${Math.round((store.usage_bytes || 0) / 1024 / 1024 * 100) / 100} MB`,
-        lastUpdated: new Date(store.created_at * 1000).toLocaleDateString('ru-RU'),
-        vectorStoreId: store.id
-      }));
-      
-      return NextResponse.json({ knowledgeBases });
-    } catch (vectorStoreError) {
-      console.log('Vector stores API not available, using local storage:', vectorStoreError);
-      // Возвращаем локально сохраненные базы знаний
-      return NextResponse.json({ knowledgeBases: localKnowledgeBases });
-    }
+    
+    return NextResponse.json({ knowledgeBases });
   } catch (error) {
     console.error('Error fetching knowledge bases:', error);
     return NextResponse.json(
@@ -103,6 +177,14 @@ export async function GET(request: NextRequest) {
 // POST - создать новую базу знаний
 export async function POST(request: NextRequest) {
   try {
+    const user = getUserFromToken(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const { name, description, category } = await request.json();
 
     if (!name) {
@@ -112,56 +194,47 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let knowledgeBase: KnowledgeBase;
+    let vectorStoreId: string | null = null;
 
     // Пытаемся создать vector store в OpenAI
     try {
-      if (!openai.vectorStores) {
-        throw new Error('Vector stores API not available');
+      if (openai.vectorStores) {
+        const vectorStore = await (openai as any).vectorStores.create({
+          name,
+          metadata: {
+            description: description || 'No description',
+            category: category || 'general'
+          }
+        });
+        vectorStoreId = vectorStore.id;
       }
-      const vectorStore = await openai.vectorStores.create({
-        name,
-        metadata: {
-          description: description || 'No description',
-          category: category || 'general'
-        }
-      });
-      
-      knowledgeBase = {
-        id: vectorStore.id,
-        name: vectorStore.name || name,
-        description: description || 'No description',
-        category: category || 'general',
-        status: 'ready',
-        documents: 0,
-        accuracy: 95,
-        usage: 0,
-        size: '0 MB',
-        lastUpdated: new Date().toLocaleDateString('ru-RU'),
-        vectorStoreId: vectorStore.id
-      };
     } catch (vectorStoreError) {
-      console.log('Vector stores API not available, creating local knowledge base:', vectorStoreError);
-      
-      // Создаем локальную базу знаний
-      const localId = `kb_${Date.now()}`;
-      knowledgeBase = {
-        id: localId,
-        name,
-        description: description || 'No description',
-        category: category || 'general',
-        status: 'ready',
-        documents: 0,
-        accuracy: 95,
-        usage: 0,
-        size: '0 MB',
-        lastUpdated: new Date().toLocaleDateString('ru-RU'),
-        vectorStoreId: localId
-      };
-      
-      // Сохраняем в локальном хранилище
-      localKnowledgeBases.push(knowledgeBase);
+      console.log('Vector stores API not available, creating without OpenAI integration:', vectorStoreError);
     }
+
+    // Сохраняем в базе данных
+    const newKnowledgeBase = await prisma.KnowledgeBase.create({
+      data: {
+        name,
+        description: description || null,
+        vectorStoreId,
+        userId: user.userId
+      }
+    });
+
+    const knowledgeBase: KnowledgeBase = {
+       id: newKnowledgeBase.id.toString(),
+       name: newKnowledgeBase.name,
+       description: newKnowledgeBase.description || 'No description',
+       category: 'general',
+       status: 'ready',
+       documents: 0,
+       accuracy: 95,
+       usage: 0,
+       size: '0 MB',
+       lastUpdated: newKnowledgeBase.updatedAt.toLocaleDateString('ru-RU'),
+       vectorStoreId: newKnowledgeBase.vectorStoreId
+     };
 
     return NextResponse.json({ knowledgeBase });
   } catch (error) {
@@ -176,6 +249,14 @@ export async function POST(request: NextRequest) {
 // DELETE - удалить базу знаний
 export async function DELETE(request: NextRequest) {
   try {
+    const user = getUserFromToken(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
@@ -186,17 +267,38 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Пытаемся удалить vector store из OpenAI
-    try {
-      if (!openai.vectorStores) {
-        throw new Error('Vector stores API not available');
+    // Проверяем, принадлежит ли база знаний пользователю
+    const dbKnowledgeBase = await prisma.KnowledgeBase.findFirst({
+      where: {
+        id: parseInt(id),
+        userId: user.userId
       }
-      await openai.vectorStores.delete(id);
-    } catch (vectorStoreError) {
-      console.log('Vector stores API not available, removing from local storage:', vectorStoreError);
-      // Удаляем из локального хранилища
-      localKnowledgeBases = localKnowledgeBases.filter(kb => kb.id !== id);
+    });
+
+    if (!dbKnowledgeBase) {
+      return NextResponse.json(
+        { error: 'Knowledge base not found or access denied' },
+        { status: 404 }
+      );
     }
+
+    // Пытаемся удалить vector store из OpenAI
+    if (dbKnowledgeBase.vectorStoreId) {
+      try {
+        if (openai.vectorStores) {
+          await (openai as any).vectorStores.delete(dbKnowledgeBase.vectorStoreId);
+        }
+      } catch (vectorStoreError) {
+        console.log('Vector stores API not available or vector store already deleted:', vectorStoreError);
+      }
+    }
+
+    // Удаляем из базы данных
+    await prisma.KnowledgeBase.delete({
+      where: {
+        id: parseInt(id)
+      }
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

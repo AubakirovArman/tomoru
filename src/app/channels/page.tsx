@@ -19,6 +19,18 @@ interface Bot {
   telegramEnabled: boolean;
   createdAt: string;
   updatedAt: string;
+  knowledgeBases?: {
+    knowledgeBase: KnowledgeBase;
+  }[];
+}
+
+interface KnowledgeBase {
+  id: number;
+  name: string;
+  description: string | null;
+  vectorStoreId: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface UploadedFile {
@@ -36,6 +48,9 @@ export default function Channels() {
   const [chattingBot, setChattingBot] = useState<Bot | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [availableKnowledgeBases, setAvailableKnowledgeBases] = useState<KnowledgeBase[]>([]);
+  const [botKnowledgeBases, setBotKnowledgeBases] = useState<KnowledgeBase[]>([]);
+  const [loadingKnowledge, setLoadingKnowledge] = useState(false);
   const [editForm, setEditForm] = useState({
     name: '',
     description: '',
@@ -83,6 +98,103 @@ export default function Channels() {
     }
   };
 
+  const fetchAvailableKnowledgeBases = async () => {
+    try {
+      const response = await fetch('/api/knowledge', {
+        headers: createAuthHeaders()
+      });
+
+      if (handleAuthError(response, router)) {
+        return;
+      }
+
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableKnowledgeBases(data.knowledgeBases || []);
+      }
+    } catch (error) {
+      console.error('Error fetching knowledge bases:', error);
+    }
+  };
+
+  const fetchBotKnowledgeBases = async (botId: number) => {
+    setLoadingKnowledge(true);
+    try {
+      const response = await fetch(`/api/bots/knowledge?botId=${botId}`, {
+        headers: createAuthHeaders()
+      });
+
+      if (handleAuthError(response, router)) {
+        return;
+      }
+
+      if (response.ok) {
+        const data = await response.json();
+        setBotKnowledgeBases(data.knowledgeBases || []);
+      }
+    } catch (error) {
+      console.error('Error fetching bot knowledge bases:', error);
+    } finally {
+      setLoadingKnowledge(false);
+    }
+  };
+
+  const handleLinkKnowledgeBase = async (knowledgeBaseId: number) => {
+    if (!editingBot) return;
+
+    try {
+      const response = await fetch('/api/bots/knowledge', {
+        method: 'POST',
+        headers: createAuthHeaders({
+          'Content-Type': 'application/json'
+        }),
+        body: JSON.stringify({
+          botId: editingBot.id,
+          knowledgeBaseId
+        })
+      });
+
+      if (handleAuthError(response, router)) {
+        return;
+      }
+
+      if (response.ok) {
+        await fetchBotKnowledgeBases(editingBot.id);
+      } else {
+        const error = await response.json();
+        alert(`Ошибка: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Error linking knowledge base:', error);
+      alert('Произошла ошибка при привязке базы знаний');
+    }
+  };
+
+  const handleUnlinkKnowledgeBase = async (knowledgeBaseId: number) => {
+    if (!editingBot) return;
+
+    try {
+      const response = await fetch(`/api/bots/knowledge?botId=${editingBot.id}&knowledgeBaseId=${knowledgeBaseId}`, {
+        method: 'DELETE',
+        headers: createAuthHeaders()
+      });
+
+      if (handleAuthError(response, router)) {
+        return;
+      }
+
+      if (response.ok) {
+        await fetchBotKnowledgeBases(editingBot.id);
+      } else {
+        const error = await response.json();
+        alert(`Ошибка: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Error unlinking knowledge base:', error);
+      alert('Произошла ошибка при отвязке базы знаний');
+    }
+  };
+
   const handleEditBot = async (bot: Bot) => {
     setEditingBot(bot);
     setEditForm(prev => ({
@@ -94,6 +206,10 @@ export default function Channels() {
       specialization: bot.specialization
     }));
     setShowEditModal(true);
+    
+    // Загружаем доступные базы знаний и базы знаний бота
+    await fetchAvailableKnowledgeBases();
+    await fetchBotKnowledgeBases(bot.id);
 
     if (bot.openaiId) {
       try {
@@ -405,6 +521,12 @@ export default function Channels() {
                           {new Date(bot.updatedAt).toLocaleDateString('ru-RU')}
                         </span>
                       </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Базы знаний:</span>
+                        <span className="font-medium text-blue-600">
+                          🧠 {bot.knowledgeBases?.length || 0}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="mb-4">
@@ -631,6 +753,83 @@ export default function Channels() {
                 >
                   Добавить файл
                 </button>
+              </div>
+
+              {/* Knowledge Bases Section */}
+              <div className="border-t pt-4 mt-6">
+                <h3 className="text-lg font-medium text-gray-800 mb-3">🧠 Базы знаний</h3>
+                
+                {loadingKnowledge ? (
+                  <div className="text-center py-4">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                    <div className="text-sm text-gray-600">Загрузка...</div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Привязанные базы знаний */}
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">Привязанные базы знаний</h4>
+                      {botKnowledgeBases.length > 0 ? (
+                        <div className="space-y-2">
+                          {botKnowledgeBases.map((kb) => (
+                            <div key={kb.id} className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg p-3">
+                              <div>
+                                <div className="text-sm font-medium text-green-800">{kb.name}</div>
+                                <div className="text-xs text-green-600">{kb.description || 'Без описания'}</div>
+                              </div>
+                              <button
+                                onClick={() => handleUnlinkKnowledgeBase(kb.id)}
+                                className="bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded text-xs"
+                              >
+                                Отвязать
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-500 bg-gray-50 p-3 rounded-lg">
+                          Нет привязанных баз знаний
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Доступные базы знаний */}
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">Доступные базы знаний</h4>
+                      {availableKnowledgeBases.filter(kb => !botKnowledgeBases.some(bkb => bkb.id === kb.id)).length > 0 ? (
+                        <div className="space-y-2 max-h-40 overflow-y-auto">
+                          {availableKnowledgeBases
+                            .filter(kb => !botKnowledgeBases.some(bkb => bkb.id === kb.id))
+                            .map((kb) => (
+                            <div key={kb.id} className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg p-3">
+                              <div>
+                                <div className="text-sm font-medium text-blue-800">{kb.name}</div>
+                                <div className="text-xs text-blue-600">{kb.description || 'Без описания'}</div>
+                              </div>
+                              <button
+                                onClick={() => handleLinkKnowledgeBase(kb.id)}
+                                className="bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded text-xs"
+                              >
+                                Привязать
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-500 bg-gray-50 p-3 rounded-lg">
+                          {availableKnowledgeBases.length === 0 
+                            ? 'У вас нет баз знаний. Создайте их в разделе "Базы знаний"'
+                            : 'Все доступные базы знаний уже привязаны к этому боту'
+                          }
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="text-xs text-gray-500 bg-yellow-50 border border-yellow-200 rounded-lg p-2">
+                      💡 Привязанные базы знаний позволяют боту использовать дополнительную информацию для более точных ответов
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Telegram Integration Section */}

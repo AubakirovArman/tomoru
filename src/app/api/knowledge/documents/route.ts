@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { prisma } from '@/lib/prisma';
+import jwt from 'jsonwebtoken';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -7,6 +9,23 @@ const openai = new OpenAI({
 
 // Локальное хранилище для документов (временное решение)
 let localDocuments: { [knowledgeBaseId: string]: any[] } = {};
+
+// Функция для получения пользователя из токена
+function getUserFromToken(request: NextRequest): { userId: number } | null {
+  try {
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return null;
+    }
+    
+    const token = authHeader.substring(7);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret') as any;
+    return { userId: decoded.userId };
+  } catch (error) {
+    console.error('Error verifying token:', error);
+    return null;
+  }
+}
 
 interface Document {
   id: string;
@@ -20,6 +39,14 @@ interface Document {
 // GET - получить документы базы знаний
 export async function GET(request: NextRequest) {
   try {
+    const user = getUserFromToken(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const knowledgeBaseId = searchParams.get('knowledgeBaseId');
 
@@ -30,9 +57,27 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Пытаемся получить файлы из vector store
-    try {
-      const vectorStoreFiles = await openai.vectorStores.files.list(knowledgeBaseId);
+    // Проверяем, принадлежит ли база знаний пользователю
+    const dbKnowledgeBase = await prisma.KnowledgeBase.findFirst({
+      where: {
+        id: parseInt(knowledgeBaseId),
+        userId: user.userId
+      }
+    });
+
+    if (!dbKnowledgeBase) {
+      return NextResponse.json(
+        { error: 'Knowledge base not found or access denied' },
+        { status: 404 }
+      );
+    }
+
+   // Пытаемся получить файлы из vector store
+     try {
+       if (!dbKnowledgeBase.vectorStoreId) {
+         throw new Error('No vector store ID available');
+       }
+       const vectorStoreFiles = await (openai as any).vectorStores.files.list(dbKnowledgeBase.vectorStoreId);
 
       const documents: Document[] = await Promise.all(
         vectorStoreFiles.data.map(async (file: any) => {
@@ -83,6 +128,14 @@ export async function GET(request: NextRequest) {
 // POST - загрузить документ в базу знаний
 export async function POST(request: NextRequest) {
   try {
+    const user = getUserFromToken(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const knowledgeBaseId = formData.get('knowledgeBaseId') as string;
@@ -91,6 +144,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'File and knowledge base ID are required' },
         { status: 400 }
+      );
+    }
+
+    // Проверяем, принадлежит ли база знаний пользователю
+    const dbKnowledgeBase = await prisma.KnowledgeBase.findFirst({
+      where: {
+        id: parseInt(knowledgeBaseId),
+        userId: user.userId
+      }
+    });
+
+    if (!dbKnowledgeBase) {
+      return NextResponse.json(
+        { error: 'Knowledge base not found or access denied' },
+        { status: 404 }
       );
     }
 
@@ -110,9 +178,13 @@ export async function POST(request: NextRequest) {
         purpose: 'assistants'
       });
 
-      await openai.vectorStores.files.create(knowledgeBaseId, {
-        file_id: uploadedFile.id
-      });
+      if (dbKnowledgeBase.vectorStoreId) {
+        await openai.vectorStores.files.create(dbKnowledgeBase.vectorStoreId, {
+          file_id: uploadedFile.id
+        });
+      } else {
+        throw new Error('No vector store ID available');
+      }
 
       document = {
         id: uploadedFile.id,
@@ -154,6 +226,14 @@ export async function POST(request: NextRequest) {
 // DELETE - удалить документ из базы знаний
 export async function DELETE(request: NextRequest) {
   try {
+    const user = getUserFromToken(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const fileId = searchParams.get('fileId');
     const knowledgeBaseId = searchParams.get('knowledgeBaseId');
@@ -165,11 +245,30 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
+    // Проверяем, принадлежит ли база знаний пользователю
+    const dbKnowledgeBase = await prisma.KnowledgeBase.findFirst({
+      where: {
+        id: parseInt(knowledgeBaseId),
+        userId: user.userId
+      }
+    });
+
+    if (!dbKnowledgeBase) {
+      return NextResponse.json(
+        { error: 'Knowledge base not found or access denied' },
+        { status: 404 }
+      );
+    }
+
     try {
-      await openai.vectorStores.files.delete(fileId, {
-        vector_store_id: knowledgeBaseId
-      });
-      await openai.files.delete(fileId);
+      if (dbKnowledgeBase.vectorStoreId) {
+        await openai.vectorStores.files.delete(fileId, {
+          vector_store_id: dbKnowledgeBase.vectorStoreId
+        });
+        await openai.files.delete(fileId);
+      } else {
+        throw new Error('No vector store ID available');
+      }
     } catch (vectorStoreError) {
       console.log('Vector stores API not available, removing from local storage:', vectorStoreError);
       if (localDocuments[knowledgeBaseId]) {

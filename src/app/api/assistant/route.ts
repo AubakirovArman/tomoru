@@ -17,14 +17,14 @@ export async function GET(request: NextRequest) {
   try {
     const assistant = await openai.beta.assistants.retrieve(id);
     let files: { id: string; filename: string; bytes: number }[] = [];
-    
+
     // Получаем файлы из vector stores согласно документации
     const vectorStoreIds = assistant.tool_resources?.file_search?.vector_store_ids || [];
-    
+
     for (const vectorStoreId of vectorStoreIds) {
       try {
         const vectorStoreFiles = await openai.beta.vectorStores.files.list(vectorStoreId);
-        
+
         if (vectorStoreFiles && vectorStoreFiles.data) {
           for (const vectorFile of vectorStoreFiles.data) {
             try {
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
         console.error(`Error retrieving files from vector store ${vectorStoreId}:`, vectorError);
       }
     }
-    
+
     return NextResponse.json({ assistant, files });
   } catch (error) {
     console.error('Error retrieving assistant:', error);
@@ -82,21 +82,21 @@ export async function PUT(request: NextRequest) {
         // Логируем доступные методы для отладки
         console.log('OpenAI beta object:', Object.keys(openai.beta));
         console.log('OpenAI object keys:', Object.keys(openai));
-        
+
         // Создаем vector store через основной API
         const vectorStore = await openai.beta.vectorStores.create({
-             name: `Files for ${data.name || 'Assistant'}`,
-             file_ids: files
-           });
-        
+          name: `Files for ${data.name || 'Assistant'}`,
+          file_ids: files
+        });
+
         console.log('Created vector store:', vectorStore.id);
-        
+
         // Добавляем file_search tool и настраиваем tool_resources
         data.tools = [
           ...(data.tools || []),
           { type: 'file_search' }
         ];
-        
+
         data.tool_resources = {
           file_search: {
             vector_store_ids: [vectorStore.id]

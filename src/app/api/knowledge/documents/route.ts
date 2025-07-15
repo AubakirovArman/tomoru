@@ -32,10 +32,8 @@ export async function GET(request: NextRequest) {
 
     // Пытаемся получить файлы из vector store
     try {
-      const vectorStoreFiles = await (openai as any).beta.vectorStores.files.list(
-        knowledgeBaseId
-      );
-      
+      const vectorStoreFiles = await openai.beta.vectorStores.files.list(knowledgeBaseId);
+
       const documents: Document[] = await Promise.all(
         vectorStoreFiles.data.map(async (file: any) => {
           try {
@@ -44,7 +42,7 @@ export async function GET(request: NextRequest) {
               id: file.id,
               name: fileDetails.filename,
               type: fileDetails.filename.split('.').pop() || 'unknown',
-              size: `${Math.round(fileDetails.bytes / 1024 * 100) / 100} KB`,
+              size: `${Math.round((fileDetails.bytes / 1024) * 100) / 100} KB`,
               uploadDate: new Date(fileDetails.created_at * 1000).toLocaleDateString('ru-RU'),
               status:
                 file.status === 'completed'
@@ -70,7 +68,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ documents });
     } catch (vectorStoreError) {
       console.log('Vector stores API not available, using local storage:', vectorStoreError);
-      // Возвращаем локально сохраненные документы
       const documents = localDocuments[knowledgeBaseId] || [];
       return NextResponse.json({ documents });
     }
@@ -97,7 +94,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Проверяем тип файла
     const allowedTypes = ['text/plain', 'text/markdown', 'application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
     if (!allowedTypes.includes(file.type)) {
       return NextResponse.json(
@@ -108,41 +104,37 @@ export async function POST(request: NextRequest) {
 
     let document: Document;
 
-    // Пытаемся загрузить файл в OpenAI
     try {
       const uploadedFile = await openai.files.create({
         file: file,
         purpose: 'assistants'
       });
 
-      // Добавляем файл в vector store
-      await (openai as any).beta.vectorStores.files.create(knowledgeBaseId, {
+      await openai.beta.vectorStores.files.create(knowledgeBaseId, {
         file_id: uploadedFile.id
       });
-      
+
       document = {
         id: uploadedFile.id,
         name: file.name,
         type: file.type.split('/')[1] || 'unknown',
-        size: `${Math.round(file.size / 1024 * 100) / 100} KB`,
+        size: `${Math.round((file.size / 1024) * 100) / 100} KB`,
         uploadDate: new Date().toLocaleDateString('ru-RU'),
         status: 'processing'
       };
     } catch (vectorStoreError) {
       console.log('Vector stores API not available, saving locally:', vectorStoreError);
-      
-      // Создаем локальный документ
+
       const localId = `doc_${Date.now()}`;
       document = {
         id: localId,
         name: file.name,
         type: file.type.split('/')[1] || 'unknown',
-        size: `${Math.round(file.size / 1024 * 100) / 100} KB`,
+        size: `${Math.round((file.size / 1024) * 100) / 100} KB`,
         uploadDate: new Date().toLocaleDateString('ru-RU'),
         status: 'processed'
       };
-      
-      // Сохраняем в локальном хранилище
+
       if (!localDocuments[knowledgeBaseId]) {
         localDocuments[knowledgeBaseId] = [];
       }
@@ -173,13 +165,11 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Пытаемся удалить файл из vector store
     try {
-      await (openai as any).beta.vectorStores.files.del(knowledgeBaseId, fileId);
-      await (openai as any).files.del(fileId);
+      await openai.beta.vectorStores.files.del(knowledgeBaseId, fileId);
+      await openai.files.del(fileId);
     } catch (vectorStoreError) {
       console.log('Vector stores API not available, removing from local storage:', vectorStoreError);
-      // Удаляем из локального хранилища
       if (localDocuments[knowledgeBaseId]) {
         localDocuments[knowledgeBaseId] = localDocuments[knowledgeBaseId].filter(
           doc => doc.id !== fileId

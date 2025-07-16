@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Navigation from '../../components/Navigation';
 import ChatWindow from '../../components/ChatWindow';
 import { handleAuthError, createAuthHeaders, isAuthenticated } from '../../lib/authUtils';
+import { QRCode } from 'qrcode.react';
 
 interface Bot {
   id: number;
@@ -51,6 +52,8 @@ export default function Channels() {
   const [availableKnowledgeBases, setAvailableKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [botKnowledgeBases, setBotKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [loadingKnowledge, setLoadingKnowledge] = useState(false);
+  const [whatsappQr, setWhatsappQr] = useState<string | null>(null);
+  const [whatsappStatus, setWhatsappStatus] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
     name: '',
     description: '',
@@ -206,6 +209,8 @@ export default function Channels() {
       specialization: bot.specialization
     }));
     setShowEditModal(true);
+    setWhatsappQr(null);
+    setWhatsappStatus(null);
     
     // Загружаем доступные базы знаний и базы знаний бота
     await fetchAvailableKnowledgeBases();
@@ -399,6 +404,23 @@ export default function Channels() {
     } catch (error) {
       console.error('Error disabling Telegram:', error);
       alert('Произошла ошибка при отключении');
+    }
+  };
+
+  const handleConnectWhatsApp = async () => {
+    try {
+      setWhatsappStatus(null);
+      setWhatsappQr(null);
+      const response = await fetch('/api/whatsapp/connect');
+      const data = await response.json();
+      if (data.qr) {
+        setWhatsappQr(data.qr);
+      }
+      if (data.status) {
+        setWhatsappStatus(data.status);
+      }
+    } catch (error) {
+      console.error('Error connecting WhatsApp:', error);
     }
   };
 
@@ -881,6 +903,29 @@ export default function Channels() {
                   </div>
                 )}
               </div>
+
+              {/* WhatsApp Integration Section */}
+              <div className="border-t pt-4 mt-6">
+                <h3 className="text-lg font-medium text-gray-800 mb-3">Интеграция с WhatsApp</h3>
+                <div className="space-y-3">
+                  {whatsappQr ? (
+                    <div className="flex flex-col items-center space-y-2">
+                      <QRCode value={whatsappQr} />
+                      <div className="text-sm text-gray-600">Сканируйте QR код приложением WhatsApp</div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleConnectWhatsApp}
+                      className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm"
+                    >
+                      Подключить WhatsApp
+                    </button>
+                  )}
+                  {whatsappStatus && (
+                    <div className="text-sm text-gray-500">{whatsappStatus}</div>
+                  )}
+                </div>
+              </div>
             </div>
             
             <div className="flex space-x-3 mt-6">
@@ -888,6 +933,8 @@ export default function Channels() {
                 onClick={() => {
                   setShowEditModal(false);
                   setEditingBot(null);
+                  setWhatsappQr(null);
+                  setWhatsappStatus(null);
                 }}
                 className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-lg transition-colors"
               >

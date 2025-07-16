@@ -9,10 +9,10 @@ export async function POST(request: NextRequest) {
 
     let thread;
     if (threadId) {
-      thread = await openai.threads.retrieve(threadId);
+      thread = await openai.beta.threads.retrieve(threadId);
       
       // Проверяем активные запуски и ждем их завершения
-      const runs = await openai.threads.runs.list(thread.id);
+      const runs = await openai.beta.threads.runs.list(thread.id);
       const activeRun = runs.data.find(run => 
         run.status === 'in_progress' || 
         run.status === 'queued' || 
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
         ) {
           await new Promise(resolve => setTimeout(resolve, 1000));
           try {
-            runStatus = await openai.threads.runs.retrieve(activeRun.id, { thread_id: thread.id });
+            runStatus = await openai.beta.threads.runs.retrieve(activeRun.id, { thread_id: thread.id });
           } catch (error) {
             console.error('Error retrieving run status:', error);
             break;
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
         }
       }
     } else {
-      thread = await openai.threads.create();
+      thread = await openai.beta.threads.create();
     }
 
     // Добавляем сообщение пользователя с инструкцией отвечать на том же языке
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
 
 [IMPORTANT INSTRUCTION: Always respond in the same language as the user's message above. If the user writes in Russian - respond in Russian, if in English - respond in English, if in another language - respond in that same language.]`;
     
-    await openai.threads.messages.create(thread.id, {
+    await openai.beta.threads.messages.create(thread.id, {
       role: 'user',
       content: messageWithLanguageInstruction,
       ...(files && files.length > 0 && {
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Запускаем ассистента
-    const run = await openai.threads.runs.create(thread.id, {
+    const run = await openai.beta.threads.runs.create(thread.id, {
       assistant_id: assistant.id
     });
 
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
     while (runStatus.status === 'in_progress' || runStatus.status === 'queued') {
        await new Promise(resolve => setTimeout(resolve, 1000));
        try {
-         const runs = await openai.threads.runs.list(thread.id);
+         const runs = await openai.beta.threads.runs.list(thread.id);
          const currentRun = runs.data.find(r => r.id === run.id);
          if (currentRun) {
            runStatus = currentRun;
@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
               
               // Отправляем результаты функций
               console.log('Submitting tool outputs...');
-              await openai.threads.runs.submitToolOutputs(
+              await openai.beta.threads.runs.submitToolOutputs(
                 runStatus.id,
                 {
                   thread_id: thread.id,
@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
               ) {
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 try {
-                  const runs = await openai.threads.runs.list(thread.id);
+                  const runs = await openai.beta.threads.runs.list(thread.id);
                   const currentRun = runs.data.find(r => r.id === runStatus.id);
                   if (currentRun) {
                     finalRunStatus = currentRun;
@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
               console.log('Final run status:', finalRunStatus.status);
               
               // Получаем финальное сообщение
-              const messages = await openai.threads.messages.list(thread.id, { order: 'desc' });
+              const messages = await openai.beta.threads.messages.list(thread.id, { order: 'desc' });
               const lastMessage = messages.data.find((msg: any) => msg.role === 'assistant');
               
               let response = '';
@@ -182,7 +182,7 @@ export async function POST(request: NextRequest) {
       }
       
       // Обычное сообщение без вызова функций
-      const messages = await openai.threads.messages.list(thread.id, { order: 'desc' });
+      const messages = await openai.beta.threads.messages.list(thread.id, { order: 'desc' });
       const lastMessage = messages.data.find((msg: any) => msg.role === 'assistant');
       
       let response = '';
@@ -255,7 +255,7 @@ export async function PUT(request: NextRequest) {
         console.log('Creating vector store for files:', files);
         
         // Создаем vector store через основной API
-        const vectorStore = await openai.vectorStores.create({
+        const vectorStore = await openai.beta.vectorStores.create({
           name: `Files for ${botConfig.name || 'Assistant'}`
         });
         
@@ -264,7 +264,7 @@ export async function PUT(request: NextRequest) {
         // Добавляем файлы в vector store
         for (const fileId of files) {
           try {
-            await openai.vectorStores.files.create(vectorStore.id, {
+            await openai.beta.vectorStores.files.create(vectorStore.id, {
               file_id: fileId
             });
             console.log('Added file to vector store:', fileId);

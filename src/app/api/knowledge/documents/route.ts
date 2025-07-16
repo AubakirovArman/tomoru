@@ -2,16 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { prisma } from '@/lib/prisma';
 import jwt from 'jsonwebtoken';
+import { promises as fs } from 'fs';
+import path from 'path';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Локальное хранилище для документов (временное решение)
-// Сохраняем не только метаданные, но и объект File,
-// чтобы можно было просматривать и скачивать файл
+// Локальное хранилище для документов. Здесь сохраняем метаданные
+// и путь к локально сохранённому файлу, чтобы можно было
+// просматривать и скачивать файл независимо от OpenAI
 export let localDocuments: {
-  [knowledgeBaseId: string]: (Document & { file?: File })[]
+  [knowledgeBaseId: string]: (Document & { filePath: string })[]
 } = {};
 
 // Функция для получения пользователя из токена
@@ -95,50 +97,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-   // Пытаемся получить файлы из vector store
-     try {
-       if (!dbKnowledgeBase.vectorStoreId) {
-         throw new Error('No vector store ID available');
-       }
-       const vectorStoreFiles = await (openai as any).vectorStores.files.list(dbKnowledgeBase.vectorStoreId);
-
-      const documents: Document[] = await Promise.all(
-        vectorStoreFiles.data.map(async (file: any) => {
-          try {
-            const fileDetails = await openai.files.retrieve(file.id);
-            return {
-              id: file.id,
-              name: fileDetails.filename,
-              type: fileDetails.filename.split('.').pop() || 'unknown',
-              size: `${Math.round((fileDetails.bytes / 1024) * 100) / 100} KB`,
-              uploadDate: new Date(fileDetails.created_at * 1000).toLocaleDateString('ru-RU'),
-              status:
-                file.status === 'completed'
-                  ? 'processed'
-                  : file.status === 'failed'
-                  ? 'failed'
-                  : 'processing'
-            };
-          } catch (error) {
-            console.error('Error fetching file details:', error);
-            return {
-              id: file.id,
-              name: 'Unknown file',
-              type: 'unknown',
-              size: '0 KB',
-              uploadDate: new Date().toLocaleDateString('ru-RU'),
-              status: 'error'
-            };
-          }
-        })
-      );
-
-      return NextResponse.json({ documents });
-    } catch (vectorStoreError) {
-      console.log('Vector stores API not available, using local storage:', vectorStoreError);
-      const documents = localDocuments[knowledgeBaseId] || [];
-      return NextResponse.json({ documents });
-    }
+    const documents = localDocuments[knowledgeBaseId] || [];
+    return NextResponse.json({ documents });
   } catch (error) {
     console.error('Error fetching documents:', error);
     return NextResponse.json(
@@ -221,6 +181,7 @@ export async function POST(request: NextRequest) {
 
     const fileName = file.name;
     let document: Document;
+    let fileId: string | null = null;
 
     try {
       const uploadedFile = await openai.files.create({
@@ -236,6 +197,7 @@ export async function POST(request: NextRequest) {
         throw new Error('No vector store ID available');
       }
 
+      fileId = uploadedFile.id;
       document = {
         id: uploadedFile.id,
         name: fileName,
@@ -248,6 +210,7 @@ export async function POST(request: NextRequest) {
       console.log('Vector stores API not available, saving locally:', vectorStoreError);
 
       const localId = `doc_${Date.now()}`;
+      fileId = localId;
       document = {
         id: localId,
         name: fileName,
@@ -256,16 +219,22 @@ export async function POST(request: NextRequest) {
         uploadDate: new Date().toLocaleDateString('ru-RU'),
         status: 'processed'
       };
-
-      if (!localDocuments[knowledgeBaseId]) {
-        localDocuments[knowledgeBaseId] = [];
-      }
-      // Сохраняем вместе с метаданными сам файл
-      localDocuments[knowledgeBaseId].push({
-        ...document,
-        file
-      });
     }
+
+    // Сохраняем файл локально для последующего просмотра и скачивания
+    const uploadsDir = path.join(process.cwd(), 'uploads', knowledgeBaseId);
+    await fs.mkdir(uploadsDir, { recursive: true });
+    const localFileName = `${fileId}_${fileName}`;
+    const filePath = path.join(uploadsDir, localFileName);
+    await fs.writeFile(filePath, Buffer.from(await file.arrayBuffer()));
+
+    if (!localDocuments[knowledgeBaseId]) {
+      localDocuments[knowledgeBaseId] = [];
+    }
+    localDocuments[knowledgeBaseId].push({
+      ...document,
+      filePath
+    });
 
     return NextResponse.json({ document });
   } catch (error) {
@@ -324,12 +293,23 @@ export async function DELETE(request: NextRequest) {
         throw new Error('No vector store ID available');
       }
     } catch (vectorStoreError) {
-      console.log('Vector stores API not available, removing from local storage:', vectorStoreError);
-      if (localDocuments[knowledgeBaseId]) {
-        localDocuments[knowledgeBaseId] = localDocuments[knowledgeBaseId].filter(
-          doc => doc.id !== fileId
-        );
+      console.log('Vector stores API not available or file only stored locally:', vectorStoreError);
+    }
+
+    if (localDocuments[knowledgeBaseId]) {
+      const remaining = [] as (Document & { filePath: string })[];
+      for (const doc of localDocuments[knowledgeBaseId]) {
+        if (doc.id === fileId) {
+          try {
+            await fs.unlink(doc.filePath);
+          } catch (e) {
+            console.error('Error deleting local file:', e);
+          }
+        } else {
+          remaining.push(doc);
+        }
       }
+      localDocuments[knowledgeBaseId] = remaining;
     }
 
     return NextResponse.json({ success: true });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { prisma } from '@/lib/prisma';
 import jwt from 'jsonwebtoken';
+import { promises as fs } from 'fs';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -64,6 +65,24 @@ export async function GET(
       );
     }
 
+    const docs = localDocuments[knowledgeBaseId] || [];
+    const doc = docs.find((d) => d.id === params.fileId);
+
+    if (doc) {
+      try {
+        const data = await fs.readFile(doc.filePath);
+        return new NextResponse(data, {
+          status: 200,
+          headers: {
+            'Content-Type': doc.type ? `application/${doc.type}` : 'application/octet-stream',
+            'Content-Disposition': `inline; filename="${doc.name}"`,
+          },
+        });
+      } catch (e) {
+        console.error('Error reading local file:', e);
+      }
+    }
+
     try {
       if (!dbKnowledgeBase.vectorStoreId) {
         throw new Error('No vector store ID available');
@@ -81,25 +100,10 @@ export async function GET(
       });
     } catch (vectorStoreError) {
       console.log(
-        'Vector stores API not available, trying local storage:',
+        'Vector stores API not available and local file missing:',
         vectorStoreError
       );
-
-      const docs = localDocuments[knowledgeBaseId] || [];
-      const doc = docs.find((d) => d.id === params.fileId);
-
-      if (!doc || !doc.file) {
-        return NextResponse.json({ error: 'File not found' }, { status: 404 });
-      }
-
-      const arrayBuffer = await doc.file.arrayBuffer();
-      return new NextResponse(Buffer.from(arrayBuffer), {
-        status: 200,
-        headers: {
-          'Content-Type': doc.file.type || 'application/octet-stream',
-          'Content-Disposition': `inline; filename="${doc.name}"`,
-        },
-      });
+      return NextResponse.json({ error: 'File not found' }, { status: 404 });
     }
   } catch (error) {
     console.error('Error fetching document content:', error);

@@ -76,39 +76,54 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
-    // Создаем vector store и прикрепляем файлы согласно документации
+    // Создаем или обновляем vector store и прикрепляем файлы
     if (files && files.length > 0) {
       try {
-        // Логируем доступные методы для отладки
-        console.log('OpenAI beta object:', Object.keys(openai.beta));
-        console.log('OpenAI object keys:', Object.keys(openai));
+        const assistant = await openai.beta.assistants.retrieve(assistantId);
+        const existingVectorStores =
+          assistant.tool_resources?.file_search?.vector_store_ids || [];
 
-        // Создаем vector store через основной API
-        const vectorStore = await openai.vectorStores.create({
-          name: `Files for ${data.name || 'Assistant'}`,
-          file_ids: files
-        });
+        let vectorStoreId = existingVectorStores[0] || null;
 
-        console.log('Created vector store:', vectorStore.id);
-
-        // Добавляем file_search tool и настраиваем tool_resources
-        data.tools = [
-          ...(data.tools || []),
-          { type: 'file_search' }
-        ];
-
-        data.tool_resources = {
-          file_search: {
-            vector_store_ids: [vectorStore.id]
+        // Если vector store уже существует, прикрепляем только новые файлы
+        if (vectorStoreId) {
+          let existingFiles: string[] = [];
+          try {
+            const fileList = await openai.vectorStores.files.list(vectorStoreId);
+            existingFiles = fileList.data.map((f: any) => f.id);
+          } catch (e) {
+            console.error('Error listing vector store files:', e);
           }
+
+          for (const f of files) {
+            if (!existingFiles.includes(f)) {
+              try {
+                await openai.vectorStores.files.create(vectorStoreId, {
+                  file_id: f
+                });
+              } catch (e) {
+                console.error('Error attaching file to vector store:', e);
+              }
+            }
+          }
+        } else {
+          // Нет существующего vector store - создаем новый
+          const vectorStore = await openai.vectorStores.create({
+            name: `Files for ${data.name || 'Assistant'}`,
+            file_ids: files
+          });
+          vectorStoreId = vectorStore.id;
+        }
+
+        // Обновляем настройки file_search
+        data.tools = [...(data.tools || []), { type: 'file_search' }];
+        data.tool_resources = {
+          file_search: { vector_store_ids: [vectorStoreId] }
         };
       } catch (vectorError) {
-        console.error('Error creating vector store:', vectorError);
+        console.error('Error processing vector store:', vectorError);
         // Fallback: добавляем только file_search tool без файлов
-        data.tools = [
-          ...(data.tools || []),
-          { type: 'file_search' }
-        ];
+        data.tools = [...(data.tools || []), { type: 'file_search' }];
       }
     }
 

@@ -2,6 +2,8 @@
 
 This project can respond to WhatsApp messages using **whatsapp-web.js**. The integration runs in the Next.js API route `/api/whatsapp/webhook`.
 
+Starting from the new UI, you can initialise the WhatsApp client directly from the Channels page. The endpoint `/api/whatsapp/connect` returns a QR code string which is shown in the browser.
+
 ## 1. Install dependencies
 
 ```bash
@@ -27,13 +29,7 @@ The WhatsApp session data is stored locally using `LocalAuth` from `whatsapp-web
 npm run dev
 ```
 
-2. In a separate terminal, send a request to the webhook to initialise the WhatsApp client:
+2. Откройте раздел "Каналы" в интерфейсе приложения и нажмите кнопку **Подключить WhatsApp**. В браузере появится QR‑код, который нужно просканировать приложением WhatsApp.
 
-```bash
-curl http://localhost:3000/api/whatsapp/webhook
-```
-
-A QR code will appear in the console. Scan it with the WhatsApp application on your phone to authorise the client.
-
-Once authorised, the client will stay connected and handle incoming messages. Voice messages are transcribed with Whisper and the bot reply is sent back through WhatsApp.
+После сканирования клиент будет авторизован и продолжит работу в фоне, обрабатывая входящие сообщения так же, как это описано выше.
 

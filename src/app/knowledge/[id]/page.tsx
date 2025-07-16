@@ -405,7 +405,7 @@ export default function KnowledgeDetail() {
                     ref={fileInputRef}
                     type="file"
                     onChange={handleFileUpload}
-                    accept=".pdf,.txt,.md,.doc,.docx"
+                    accept=".pdf,.txt,.md,.doc,.docx,.csv,.xls,.xlsx"
                     className="hidden"
                   />
                   <button

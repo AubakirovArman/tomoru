@@ -221,6 +221,69 @@ export default function KnowledgeDetail() {
     }
   };
 
+  const handleViewDocument = async (document: Document) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(
+        `/api/knowledge/documents/${document.id}?knowledgeBaseId=${kbId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+      } else if (res.status === 401) {
+        router.push('/');
+      } else {
+        const error = await res.json();
+        alert(error.error || 'Ошибка просмотра файла');
+      }
+    } catch (error) {
+      console.error('Error viewing document:', error);
+      alert('Ошибка просмотра файла');
+    }
+  };
+
+  const handleDownloadDocument = async (document: Document) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(
+        `/api/knowledge/documents/${document.id}?knowledgeBaseId=${kbId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = document.name;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+      } else if (res.status === 401) {
+        router.push('/');
+      } else {
+        const error = await res.json();
+        alert(error.error || 'Ошибка скачивания файла');
+      }
+    } catch (error) {
+      console.error('Error downloading document:', error);
+      alert('Ошибка скачивания файла');
+    }
+  };
+
   const handleDeleteKnowledgeBase = async () => {
     if (!kbId || !confirm('Удалить эту базу знаний?')) return;
 
@@ -401,10 +464,16 @@ export default function KnowledgeDetail() {
                     </div>
                   </div>
                   <div className="flex space-x-2">
-                    <button className="text-blue-600 hover:text-blue-800 transition-colors">
+                    <button
+                      onClick={() => handleViewDocument(doc)}
+                      className="text-blue-600 hover:text-blue-800 transition-colors"
+                    >
                       👁️
                     </button>
-                    <button className="text-green-600 hover:text-green-800 transition-colors">
+                    <button
+                      onClick={() => handleDownloadDocument(doc)}
+                      className="text-green-600 hover:text-green-800 transition-colors"
+                    >
                       📥
                     </button>
                     <button

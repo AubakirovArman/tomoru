@@ -89,6 +89,12 @@
 - `url`: ссылка на веб-страницу (опционально)
 - `vectorStoreId`: ID базы знаний
 
+#### GET /api/knowledge/documents/{fileId}?knowledgeBaseId=vs_xxx
+Скачать или просмотреть конкретный документ
+
+Запрос возвращает содержимое файла. Его можно открыть в новой вкладке или
+сохранить на диск.
+
 #### DELETE /api/knowledge/documents?fileId=file_xxx&vectorStoreId=vs_xxx
 Удалить документ из базы знаний
 

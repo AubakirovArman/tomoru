@@ -8,7 +8,11 @@ const openai = new OpenAI({
 });
 
 // Локальное хранилище для документов (временное решение)
-let localDocuments: { [knowledgeBaseId: string]: any[] } = {};
+// Сохраняем не только метаданные, но и объект File,
+// чтобы можно было просматривать и скачивать файл
+export let localDocuments: {
+  [knowledgeBaseId: string]: (Document & { file?: File })[]
+} = {};
 
 // Функция для получения пользователя из токена
 function getUserFromToken(request: NextRequest): { userId: number } | null {
@@ -256,7 +260,11 @@ export async function POST(request: NextRequest) {
       if (!localDocuments[knowledgeBaseId]) {
         localDocuments[knowledgeBaseId] = [];
       }
-      localDocuments[knowledgeBaseId].push(document);
+      // Сохраняем вместе с метаданными сам файл
+      localDocuments[knowledgeBaseId].push({
+        ...document,
+        file
+      });
     }
 
     return NextResponse.json({ document });

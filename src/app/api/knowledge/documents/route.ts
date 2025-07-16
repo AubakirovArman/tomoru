@@ -4,6 +4,11 @@ import { prisma } from '@/lib/prisma';
 import jwt from 'jsonwebtoken';
 import { promises as fs } from 'fs';
 import path from 'path';
+import os from 'os';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -61,6 +66,75 @@ function htmlToMarkdown(html: string): string {
     .trim();
 }
 
+function arrayToMarkdownTable(rows: string[][]): string {
+  if (rows.length === 0) return '';
+  const header = rows[0].map((c) => c.trim());
+  const lines = [
+    `| ${header.join(' | ')} |`,
+    `| ${header.map(() => '---').join(' | ')} |`,
+  ];
+  for (const row of rows.slice(1)) {
+    lines.push(`| ${row.map((c) => c.trim()).join(' | ')} |`);
+  }
+  return lines.join('\n');
+}
+
+function csvToMarkdown(csv: string): string {
+  const rows = csv
+    .trim()
+    .split(/\r?\n/)
+    .map((l) => l.split(','));
+  return arrayToMarkdownTable(rows);
+}
+
+async function excelBufferToMarkdown(buffer: Buffer): Promise<string> {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'excel-'));
+  const filePath = path.join(tmpDir, 'file.xlsx');
+  await fs.writeFile(filePath, buffer);
+  try {
+    const { stdout: sheetXml } = await execFileAsync('unzip', [
+      '-p',
+      filePath,
+      'xl/worksheets/sheet1.xml',
+    ]);
+    let sharedStrings: string[] = [];
+    try {
+      const { stdout: sharedXml } = await execFileAsync('unzip', [
+        '-p',
+        filePath,
+        'xl/sharedStrings.xml',
+      ]);
+      const matches = sharedXml.match(/<t[^>]*>(.*?)<\/t>/g) || [];
+      sharedStrings = matches.map((m) => m.replace(/<[^>]+>/g, ''));
+    } catch {}
+
+    const rowMatches = sheetXml.match(/<row[^>]*>.*?<\/row>/gs) || [];
+    const rows: string[][] = [];
+    for (const r of rowMatches) {
+      const cells = r.match(/<c[^>]*>.*?<\/c>/gs) || [];
+      const row: string[] = [];
+      for (const c of cells) {
+        let v = '';
+        const vMatch = c.match(/<v[^>]*>(.*?)<\/v>/);
+        if (vMatch) {
+          v = vMatch[1];
+          if (c.includes('t="s"')) {
+            v = sharedStrings[parseInt(v, 10)] || '';
+          }
+        } else {
+          const tMatch = c.match(/<t[^>]*>(.*?)<\/t>/);
+          if (tMatch) v = tMatch[1];
+        }
+        row.push(v);
+      }
+      rows.push(row);
+    }
+    return arrayToMarkdownTable(rows);
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+}
+
 // GET - получить документы базы знаний
 export async function GET(request: NextRequest) {
   try {
@@ -97,7 +171,38 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const documents = localDocuments[knowledgeBaseId] || [];
+    const documents = [...(localDocuments[knowledgeBaseId] || [])];
+
+    try {
+      if (openai.vectorStores && dbKnowledgeBase.vectorStoreId) {
+        const remoteList = await (openai as any).vectorStores.files.list(
+          dbKnowledgeBase.vectorStoreId
+        );
+        for (const fileRef of remoteList.data || []) {
+          const fileId = fileRef.file_id || fileRef.id;
+          if (!documents.find((d) => d.id === fileId)) {
+            try {
+              const meta = await openai.files.retrieve(fileId);
+              documents.push({
+                id: meta.id,
+                name: meta.filename,
+                type: path.extname(meta.filename).replace('.', '') || 'unknown',
+                size: `${Math.round((meta.bytes / 1024) * 100) / 100} KB`,
+                uploadDate: new Date(meta.created_at * 1000).toLocaleDateString(
+                  'ru-RU'
+                ),
+                status: 'processed',
+              });
+            } catch (e) {
+              console.error('Error retrieving remote file metadata:', e);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.log('Vector stores API not available:', e);
+    }
+
     return NextResponse.json({ documents });
   } catch (error) {
     console.error('Error fetching documents:', error);
@@ -137,9 +242,39 @@ export async function POST(request: NextRequest) {
         if (!response.ok) {
           throw new Error('Failed to fetch URL');
         }
-        const html = await response.text();
-        const markdown = htmlToMarkdown(html);
-        file = new File([markdown], 'document.md', { type: 'text/markdown' });
+
+        const urlPath = new URL(url).pathname;
+        const ext = path.extname(urlPath).toLowerCase();
+
+        if (['.pdf', '.txt', '.md', '.doc', '.docx'].includes(ext)) {
+          const arrayBuffer = await response.arrayBuffer();
+          const contentType =
+            response.headers.get('content-type') ||
+            (ext === '.pdf'
+              ? 'application/pdf'
+              : ext === '.txt'
+              ? 'text/plain'
+              : ext === '.md'
+              ? 'text/markdown'
+              : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+          file = new File([arrayBuffer], path.basename(urlPath), { type: contentType });
+        } else if (ext === '.csv') {
+          const text = await response.text();
+          const markdown = csvToMarkdown(text);
+          file = new File([
+            markdown,
+          ], path.basename(urlPath).replace(ext, '.md'), { type: 'text/markdown' });
+        } else if (ext === '.xls' || ext === '.xlsx') {
+          const buffer = Buffer.from(await response.arrayBuffer());
+          const markdown = await excelBufferToMarkdown(buffer);
+          file = new File([
+            markdown,
+          ], path.basename(urlPath).replace(ext, '.md'), { type: 'text/markdown' });
+        } else {
+          const html = await response.text();
+          const markdown = htmlToMarkdown(html);
+          file = new File([markdown], 'document.md', { type: 'text/markdown' });
+        }
       } catch (e) {
         console.error('Error processing URL:', e);
         return NextResponse.json(
@@ -171,10 +306,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const allowedTypes = ['text/plain', 'text/markdown', 'application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    const allowedTypes = [
+      'text/plain',
+      'text/markdown',
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
     if (!allowedTypes.includes(file.type)) {
       return NextResponse.json(
-        { error: 'Unsupported file type. Supported: txt, md, pdf, docx' },
+        { error: 'Unsupported file type. Supported: txt, md, pdf, doc, docx' },
         { status: 400 }
       );
     }

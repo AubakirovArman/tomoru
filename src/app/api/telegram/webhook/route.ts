@@ -17,6 +17,10 @@ interface TelegramUpdate {
       type: string;
     };
     text?: string;
+    voice?: {
+      file_id: string;
+      mime_type?: string;
+    };
   };
 }
 
@@ -44,13 +48,48 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Bot not found' }, { status: 404 });
     }
     
-    // Обрабатываем только текстовые сообщения
-    if (!update.message?.text) {
+    const { message } = update;
+
+    if (!message) {
       return NextResponse.json({ ok: true });
     }
-    
-    const { message } = update;
-    const userMessage = message.text;
+
+    let userMessage: string | null = message?.text || null;
+
+    if (!userMessage && message?.voice) {
+      try {
+        const getFileResp = await fetch(
+          `https://api.telegram.org/bot${botToken}/getFile?file_id=${message.voice.file_id}`
+        );
+        if (getFileResp.ok) {
+          const fileData = await getFileResp.json();
+          const filePath = fileData.result.file_path;
+          const fileResp = await fetch(
+            `https://api.telegram.org/file/bot${botToken}/${filePath}`
+          );
+          if (fileResp.ok) {
+            const buffer = await fileResp.arrayBuffer();
+            const file = new File([
+              buffer
+            ], filePath.split('/').pop() || 'voice.ogg', {
+              type: message.voice.mime_type || 'audio/ogg'
+            });
+            const transcription = await openai.audio.transcriptions.create({
+              file,
+              model: 'whisper-1'
+            });
+            userMessage = transcription.text;
+          }
+        }
+      } catch (e) {
+        console.error('Voice transcription error:', e);
+      }
+    }
+
+    if (!userMessage) {
+      return NextResponse.json({ ok: true });
+    }
+
     const chatId = message.chat.id;
     
     // Создаем или обновляем Telegram пользователя

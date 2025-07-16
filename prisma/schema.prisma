@@ -57,6 +57,17 @@ model TelegramUser {
   @@map("telegram_users")
 }
 
+model WhatsAppUser {
+  id          Int       @id @default(autoincrement())
+  whatsappId  String    @unique // ID пользователя в WhatsApp (например 12345@c.us)
+  pushName    String?
+  messages    Message[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("whatsapp_users")
+}
+
 model Message {
   id             Int          @id @default(autoincrement())
   content        String       // Содержимое сообщения
@@ -66,6 +77,9 @@ model Message {
   telegramUserId Int?         // ID Telegram пользователя (может быть null для системных сообщений)
   telegramUser   TelegramUser? @relation(fields: [telegramUserId], references: [id], onDelete: SetNull)
   telegramMessageId BigInt?   // ID сообщения в Telegram
+  whatsappUserId Int?         // ID пользователя WhatsApp
+  whatsappUser   WhatsAppUser? @relation(fields: [whatsappUserId], references: [id], onDelete: SetNull)
+  whatsappMessageId String?   // ID сообщения в WhatsApp
   threadId       String?      // ID треда OpenAI (для группировки диалогов)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt

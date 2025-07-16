@@ -5,7 +5,22 @@ import { useRouter } from 'next/navigation';
 import Navigation from '../../components/Navigation';
 import ChatWindow from '../../components/ChatWindow';
 import { handleAuthError, createAuthHeaders, isAuthenticated } from '../../lib/authUtils';
-import { QRCode } from 'qrcode.react';
+import QRCode from 'qrcode';
+
+// QR Code Canvas Component
+const QRCodeCanvas = ({ value }: { value: string }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    if (canvasRef.current && value) {
+      QRCode.toCanvas(canvasRef.current, value, { width: 200 }, (error) => {
+        if (error) console.error('QR Code generation error:', error);
+      });
+    }
+  }, [value]);
+
+  return <canvas ref={canvasRef} />;
+};
 
 interface Bot {
   id: number;
@@ -910,7 +925,7 @@ export default function Channels() {
                 <div className="space-y-3">
                   {whatsappQr ? (
                     <div className="flex flex-col items-center space-y-2">
-                      <QRCode value={whatsappQr} />
+                      <QRCodeCanvas value={whatsappQr} />
                       <div className="text-sm text-gray-600">Сканируйте QR код приложением WhatsApp</div>
                     </div>
                   ) : (

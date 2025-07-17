@@ -5,22 +5,6 @@ import { useRouter } from 'next/navigation';
 import Navigation from '../../components/Navigation';
 import ChatWindow from '../../components/ChatWindow';
 import { handleAuthError, createAuthHeaders, isAuthenticated } from '../../lib/authUtils';
-import QRCode from 'qrcode';
-
-// QR Code Canvas Component
-const QRCodeCanvas = ({ value }: { value: string }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    if (canvasRef.current && value) {
-      QRCode.toCanvas(canvasRef.current, value, { width: 200 }, (error) => {
-        if (error) console.error('QR Code generation error:', error);
-      });
-    }
-  }, [value]);
-
-  return <canvas ref={canvasRef} />;
-};
 
 interface Bot {
   id: number;
@@ -33,6 +17,8 @@ interface Bot {
   telegramBotToken: string | null;
   telegramWebhookUrl: string | null;
   telegramEnabled: boolean;
+  wazzupApiKey: string | null;
+  wazzupChannelId: string | null;
   createdAt: string;
   updatedAt: string;
   knowledgeBases?: {
@@ -67,8 +53,6 @@ export default function Channels() {
   const [availableKnowledgeBases, setAvailableKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [botKnowledgeBases, setBotKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [loadingKnowledge, setLoadingKnowledge] = useState(false);
-  const [whatsappQr, setWhatsappQr] = useState<string | null>(null);
-  const [whatsappStatus, setWhatsappStatus] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
     name: '',
     description: '',
@@ -224,8 +208,6 @@ export default function Channels() {
       specialization: bot.specialization
     }));
     setShowEditModal(true);
-    setWhatsappQr(null);
-    setWhatsappStatus(null);
     
     // Загружаем доступные базы знаний и базы знаний бота
     await fetchAvailableKnowledgeBases();
@@ -422,22 +404,41 @@ export default function Channels() {
     }
   };
 
-  const handleConnectWhatsApp = async () => {
+  const handleSaveWazzup = async (botId: number) => {
+    const apiKeyInput = document.getElementById('wazzupApiKey') as HTMLInputElement;
+    const channelIdInput = document.getElementById('wazzupChannelId') as HTMLInputElement;
+    const apiKey = apiKeyInput?.value;
+    const channelId = channelIdInput?.value;
+
+    if (!apiKey || !channelId) {
+      alert('Введите API ключ и ID канала Wazzup24');
+      return;
+    }
+
     try {
-      setWhatsappStatus(null);
-      setWhatsappQr(null);
-      const response = await fetch('/api/whatsapp/connect');
-      const data = await response.json();
-      if (data.qr) {
-        setWhatsappQr(data.qr);
+      const response = await fetch('/api/wazzup/credentials', {
+        method: 'POST',
+        headers: createAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ botId, apiKey, channelId })
+      });
+
+      if (handleAuthError(response, router)) {
+        return;
       }
-      if (data.status) {
-        setWhatsappStatus(data.status);
+
+      if (response.ok) {
+        await fetchBots();
+        alert('Данные Wazzup24 сохранены');
+      } else {
+        const error = await response.json();
+        alert(`Ошибка: ${error.error}`);
       }
     } catch (error) {
-      console.error('Error connecting WhatsApp:', error);
+      console.error('Error saving Wazzup credentials:', error);
+      alert('Произошла ошибка при сохранении');
     }
   };
+
 
   const handleDeleteBot = async (botId: number) => {
     if (!confirm('Вы уверены, что хотите удалить этого бота?')) return;
@@ -919,26 +920,34 @@ export default function Channels() {
                 )}
               </div>
 
-              {/* WhatsApp Integration Section */}
+              {/* Wazzup24 Integration Section */}
               <div className="border-t pt-4 mt-6">
-                <h3 className="text-lg font-medium text-gray-800 mb-3">Интеграция с WhatsApp</h3>
+                <h3 className="text-lg font-medium text-gray-800 mb-3">Интеграция с Wazzup24</h3>
                 <div className="space-y-3">
-                  {whatsappQr ? (
-                    <div className="flex flex-col items-center space-y-2">
-                      <QRCodeCanvas value={whatsappQr} />
-                      <div className="text-sm text-gray-600">Сканируйте QR код приложением WhatsApp</div>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={handleConnectWhatsApp}
-                      className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm"
-                    >
-                      Подключить WhatsApp
-                    </button>
-                  )}
-                  {whatsappStatus && (
-                    <div className="text-sm text-gray-500">{whatsappStatus}</div>
-                  )}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">API ключ</label>
+                    <input
+                      type="text"
+                      id="wazzupApiKey"
+                      defaultValue={editingBot?.wazzupApiKey || ''}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">ID канала</label>
+                    <input
+                      type="text"
+                      id="wazzupChannelId"
+                      defaultValue={editingBot?.wazzupChannelId || ''}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <button
+                    onClick={() => handleSaveWazzup(editingBot!.id)}
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm"
+                  >
+                    Сохранить Wazzup24
+                  </button>
                 </div>
               </div>
             </div>
@@ -948,8 +957,6 @@ export default function Channels() {
                 onClick={() => {
                   setShowEditModal(false);
                   setEditingBot(null);
-                  setWhatsappQr(null);
-                  setWhatsappStatus(null);
                 }}
                 className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-lg transition-colors"
               >

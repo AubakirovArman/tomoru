@@ -438,6 +438,34 @@ export default function Channels() {
       alert('Произошла ошибка при сохранении');
     }
   };
+  const handleSendWazzupWebhook = async (botId: number) => {
+    const urlInput = document.getElementById("wazzupWebhookUrl") as HTMLInputElement;
+    const webhookUrl = urlInput?.value;
+    if (!webhookUrl) {
+      alert("Введите URL веб-хука");
+      return;
+    }
+    try {
+      const response = await fetch("/api/wazzup/setup", {
+        method: "POST",
+        headers: createAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ botId, webhookUrl })
+      });
+      if (handleAuthError(response, router)) {
+        return;
+      }
+      if (response.ok) {
+        alert("Webhook Wazzup24 установлен");
+      } else {
+        const error = await response.json();
+        alert(`Ошибка: ${error.error}`);
+      }
+    } catch (error) {
+      console.error("Error setting Wazzup webhook:", error);
+      alert("Произошла ошибка при установке веб-хука");
+    }
+  };
+
 
 
   const handleDeleteBot = async (botId: number) => {
@@ -947,6 +975,21 @@ export default function Channels() {
                     className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm"
                   >
                     Сохранить Wazzup24
+                  </button>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">URL веб-хука</label>
+                    <input
+                      type="text"
+                      id="wazzupWebhookUrl"
+                      placeholder="https://your-domain.com/api/wazzup/webhook"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <button
+                    onClick={() => handleSendWazzupWebhook(editingBot!.id)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm"
+                  >
+                    Отправить веб-хук
                   </button>
                 </div>
               </div>

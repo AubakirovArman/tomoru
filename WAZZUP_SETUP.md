@@ -22,6 +22,10 @@ Set the webhook URL in your Wazzup24 dashboard to:
 https://your-domain.com/api/wazzup/webhook
 ```
 
+## 4. Send webhook URL from the app
+
+On the **Channels** page you will now see an additional field "URL веб-хука". Enter the public URL to your webhook and click **Отправить веб-хук**. The app will send a request to Wazzup24 to register this URL.
+
 Incoming messages will be handled automatically and answered using the selected bot.
 
 ## Notes

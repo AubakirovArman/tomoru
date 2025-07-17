@@ -64,6 +64,11 @@ async function handleMessage(payload: any, bot: any) {
   const channelId = payload.channelId;
   let text: string | undefined = payload.text;
   const contactId = payload.contactId || payload.phone || payload.chatId;
+
+  if (payload.isEcho) {
+    console.log('Ignoring echo message');
+    return;
+  }
   
   console.log('Message details:', {
     channelId,

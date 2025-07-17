@@ -34,6 +34,8 @@ model Bot {
   telegramBotToken   String?  // Токен Telegram бота
   telegramWebhookUrl String?  // URL веб-хука для Telegram
   telegramEnabled    Boolean  @default(false) // Включена ли Telegram интеграция
+  wazzupApiKey       String?  // API ключ Wazzup24
+  wazzupChannelId    String?  // ID канала Wazzup24
   userId             Int
   user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages           Message[]

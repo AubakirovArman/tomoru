@@ -63,7 +63,7 @@ async function handleMessage(payload: any, bot: any) {
   console.log('handleMessage called with payload:', payload);
   const channelId = payload.channelId;
   let text: string | undefined = payload.text;
-  const contactId = payload.contactId || payload.phone;
+  const contactId = payload.contactId || payload.phone || payload.chatId;
   
   console.log('Message details:', {
     channelId,

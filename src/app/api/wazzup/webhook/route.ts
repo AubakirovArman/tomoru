@@ -166,7 +166,8 @@ async function handleMessage(payload: any, bot: any) {
         },
         body: JSON.stringify({
           channelId: bot.wazzupChannelId,
-          phone: contactId,
+          chatId: contactId,
+          chatType: 'whatsapp',
           text: responseText
         })
       });

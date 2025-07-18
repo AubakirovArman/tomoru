@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { openai } from '@/lib/assistant';
+import { checkQuickReply } from '@/lib/quickReplies';
 import jwt from 'jsonwebtoken';
 
 export async function POST(request: NextRequest) {
@@ -38,7 +39,14 @@ export async function POST(request: NextRequest) {
     if (!bot.openaiId) {
       return NextResponse.json({ error: 'Bot not configured with OpenAI' }, { status: 400 });
     }
-    
+
+    // Проверяем быстрые ответы
+    const quickReply = await checkQuickReply(bot.id, message);
+    if (quickReply) {
+      console.log('Quick reply found:', quickReply);
+      return NextResponse.json({ response: quickReply });
+    }
+
     try {
       // Создаем thread для разговора
       const thread = await openai.beta.threads.create();

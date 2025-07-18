@@ -88,7 +88,10 @@ export async function PUT(request: NextRequest) {
         description: botConfig.description,
         instructions: botConfig.instructions,
         personality: botConfig.personality,
-        specialization: botConfig.specialization
+        specialization: botConfig.specialization,
+        model: botConfig.model || 'gpt-4o',
+        temperature: botConfig.temperature || 0.7,
+        topP: botConfig.topP || 1.0
       }
     });
 

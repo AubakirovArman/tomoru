@@ -240,6 +240,19 @@ export async function PUT(request: NextRequest) {
 
     console.log('User authenticated:', decoded.userId);
 
+    // Проверяем существование пользователя
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId }
+    });
+    
+    if (!user) {
+      console.log('User not found in database:', decoded.userId);
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      );
+    }
+
     // Создаем нового ассистента в OpenAI
     console.log('Creating OpenAI assistant...');
     const assistantConfig: any = {
@@ -298,6 +311,9 @@ export async function PUT(request: NextRequest) {
         instructions: botConfig.instructions,
         personality: botConfig.personality,
         specialization: botConfig.specialization,
+        model: 'gpt-4o',
+        temperature: 0.7,
+        topP: 1.0,
         openaiId: assistant.id,
         userId: decoded.userId
       }

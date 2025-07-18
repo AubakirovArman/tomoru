@@ -41,6 +41,16 @@ interface UploadedFile {
   size: number;
 }
 
+interface QuickReply {
+  id: number;
+  question: string;
+  variations: string[];
+  answer: string;
+  botId: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export default function Channels() {
   const [loading, setLoading] = useState(true);
   const [bots, setBots] = useState<Bot[]>([]);
@@ -48,12 +58,21 @@ export default function Channels() {
   const [editingBot, setEditingBot] = useState<Bot | null>(null);
   const [showChatModal, setShowChatModal] = useState(false);
   const [chattingBot, setChattingBot] = useState<Bot | null>(null);
-  const [activeTab, setActiveTab] = useState<'basic' | 'ai' | 'integrations'>('basic');
+  const [activeTab, setActiveTab] = useState<'basic' | 'ai' | 'integrations' | 'quickreplies'>('basic');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [availableKnowledgeBases, setAvailableKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [botKnowledgeBases, setBotKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [loadingKnowledge, setLoadingKnowledge] = useState(false);
+  const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
+  const [showQuickReplyModal, setShowQuickReplyModal] = useState(false);
+  const [quickReplyForm, setQuickReplyForm] = useState({
+    question: '',
+    variations: [] as string[],
+    answer: ''
+  });
+  const [generatingVariations, setGeneratingVariations] = useState(false);
+  const [generatingAnswer, setGeneratingAnswer] = useState(false);
   const [editForm, setEditForm] = useState({
     name: '',
     description: '',
@@ -222,6 +241,7 @@ export default function Channels() {
     // Загружаем доступные базы знаний и базы знаний бота
     await fetchAvailableKnowledgeBases();
     await fetchBotKnowledgeBases(bot.id);
+    await fetchQuickReplies(bot.id);
 
     if (bot.openaiId) {
       try {
@@ -526,6 +546,166 @@ export default function Channels() {
     setChattingBot(null);
   };
 
+  // Quick Replies Functions
+  const fetchQuickReplies = async (botId: number) => {
+    try {
+      const response = await fetch(`/api/bots/quickreplies?botId=${botId}`, {
+        headers: createAuthHeaders()
+      });
+
+      if (handleAuthError(response, router)) {
+        return;
+      }
+
+      if (response.ok) {
+        const data = await response.json();
+        setQuickReplies(data.quickReplies || []);
+      }
+    } catch (error) {
+      console.error('Error fetching quick replies:', error);
+    }
+  };
+
+  const handleGenerateVariations = async () => {
+    if (!quickReplyForm.question || !editingBot) return;
+
+    setGeneratingVariations(true);
+    try {
+      const response = await fetch('/api/bots/quickreplies/generate-variations', {
+        method: 'POST',
+        headers: createAuthHeaders({
+          'Content-Type': 'application/json'
+        }),
+        body: JSON.stringify({
+          question: quickReplyForm.question,
+          botId: editingBot.id
+        })
+      });
+
+      if (handleAuthError(response, router)) {
+        return;
+      }
+
+      if (response.ok) {
+        const data = await response.json();
+        setQuickReplyForm(prev => ({ ...prev, variations: data.variations }));
+      } else {
+        const error = await response.json();
+        alert(`Ошибка: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Error generating variations:', error);
+      alert('Произошла ошибка при генерации вариаций');
+    } finally {
+      setGeneratingVariations(false);
+    }
+  };
+
+  const handleGenerateAnswer = async () => {
+    if (!quickReplyForm.question || !editingBot) return;
+
+    setGeneratingAnswer(true);
+    try {
+      const response = await fetch('/api/bots/quickreplies/generate-answer', {
+        method: 'POST',
+        headers: createAuthHeaders({
+          'Content-Type': 'application/json'
+        }),
+        body: JSON.stringify({
+          question: quickReplyForm.question,
+          botId: editingBot.id
+        })
+      });
+
+      if (handleAuthError(response, router)) {
+        return;
+      }
+
+      if (response.ok) {
+        const data = await response.json();
+        setQuickReplyForm(prev => ({ ...prev, answer: data.answer }));
+      } else {
+        const error = await response.json();
+        alert(`Ошибка: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Error generating answer:', error);
+      alert('Произошла ошибка при генерации ответа');
+    } finally {
+      setGeneratingAnswer(false);
+    }
+  };
+
+  const removeVariation = (index: number) => {
+    setQuickReplyForm(prev => ({
+      ...prev,
+      variations: prev.variations.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleSaveQuickReply = async () => {
+    if (!editingBot || !quickReplyForm.question || !quickReplyForm.answer) return;
+
+    try {
+      const response = await fetch('/api/bots/quickreplies', {
+        method: 'POST',
+        headers: createAuthHeaders({
+          'Content-Type': 'application/json'
+        }),
+        body: JSON.stringify({
+          botId: editingBot.id,
+          question: quickReplyForm.question,
+          variations: quickReplyForm.variations,
+          answer: quickReplyForm.answer
+        })
+      });
+
+      if (handleAuthError(response, router)) {
+        return;
+      }
+
+      if (response.ok) {
+        await fetchQuickReplies(editingBot.id);
+        setShowQuickReplyModal(false);
+        setQuickReplyForm({ question: '', variations: [], answer: '' });
+        alert('Быстрый ответ сохранен!');
+      } else {
+        const error = await response.json();
+        alert(`Ошибка: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Error saving quick reply:', error);
+      alert('Произошла ошибка при сохранении');
+    }
+  };
+
+  const handleDeleteQuickReply = async (quickReplyId: number) => {
+    if (!confirm('Вы уверены, что хотите удалить этот быстрый ответ?')) return;
+
+    try {
+      const response = await fetch(`/api/bots/quickreplies?id=${quickReplyId}`, {
+        method: 'DELETE',
+        headers: createAuthHeaders()
+      });
+
+      if (handleAuthError(response, router)) {
+        return;
+      }
+
+      if (response.ok) {
+        if (editingBot) {
+          await fetchQuickReplies(editingBot.id);
+        }
+      } else {
+        const error = await response.json();
+        alert(`Ошибка: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Error deleting quick reply:', error);
+      alert('Произошла ошибка при удалении');
+    }
+  };
+
   const getSpecializationIcon = (specialization: string) => {
     const spec = specialization.toLowerCase();
     if (spec.includes('поддержка') || spec.includes('support')) return '🎧';
@@ -755,6 +935,16 @@ export default function Channels() {
                   }`}
                 >
                   🔗 Интеграции
+                </button>
+                <button
+                  onClick={() => setActiveTab('quickreplies')}
+                  className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === 'quickreplies'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  ⚡ Быстрые ответы
                 </button>
               </nav>
             </div>
@@ -1095,6 +1285,51 @@ export default function Channels() {
                   </div>
                 </div>
               )}
+
+              {/* Quick Replies Tab */}
+              {activeTab === 'quickreplies' && (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-lg font-medium text-gray-800">Быстрые ответы</h3>
+                    <button
+                      onClick={() => setShowQuickReplyModal(true)}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm"
+                    >
+                      ➕ Добавить
+                    </button>
+                  </div>
+                  
+                  {quickReplies.length > 0 ? (
+                    <div className="space-y-3">
+                      {quickReplies.map((reply) => (
+                        <div key={reply.id} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <h4 className="text-sm font-medium text-gray-800 mb-2">{reply.question}</h4>
+                              <p className="text-sm text-gray-600 mb-2">{reply.answer}</p>
+                              <div className="text-xs text-gray-500">
+                                Вариаций: {reply.variations.length}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleDeleteQuickReply(reply.id)}
+                              className="text-red-500 hover:text-red-700 text-sm ml-4"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <div className="text-4xl mb-2">⚡</div>
+                      <div className="text-sm">Нет быстрых ответов</div>
+                      <div className="text-xs text-gray-400 mt-1">Добавьте первый быстрый ответ</div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             
             {/* Modal Footer */}
@@ -1113,6 +1348,125 @@ export default function Channels() {
                 className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
               >
                 Сохранить изменения
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Reply Modal */}
+      {showQuickReplyModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="flex justify-between items-center p-6 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-800">Добавить быстрый ответ</h2>
+              <button
+                onClick={() => {
+                  setShowQuickReplyModal(false);
+                  setQuickReplyForm({ question: '', variations: [], answer: '' });
+                }}
+                className="text-gray-400 hover:text-gray-600 text-xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {/* Question Input */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Вопрос
+                </label>
+                <textarea
+                  value={quickReplyForm.question}
+                  onChange={(e) => setQuickReplyForm(prev => ({ ...prev, question: e.target.value }))}
+                  placeholder="Введите основной вопрос..."
+                  rows={3}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Question Variations */}
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Вариации вопроса
+                  </label>
+                  <button
+                    onClick={handleGenerateVariations}
+                    disabled={!quickReplyForm.question || generatingVariations}
+                    className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white px-3 py-1 rounded text-sm"
+                  >
+                    {generatingVariations ? '⏳ Генерация...' : '🎲 Генерировать'}
+                  </button>
+                </div>
+                <div className="border border-gray-300 rounded-lg p-3 min-h-[120px] max-h-[200px] overflow-y-auto bg-gray-50">
+                  {quickReplyForm.variations.length > 0 ? (
+                    <div className="space-y-2">
+                      {quickReplyForm.variations.map((variation, index) => (
+                        <div key={index} className="flex items-start space-x-2">
+                          <span className="text-xs text-gray-500 mt-1">{index + 1}.</span>
+                          <span className="text-sm text-gray-700 flex-1">{variation}</span>
+                          <button
+                            onClick={() => removeVariation(index)}
+                            className="text-red-500 hover:text-red-700 text-xs"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-500 text-center py-8">
+                      Нажмите "Генерировать" для создания вариаций вопроса
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Answer Input */}
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Ответ
+                  </label>
+                  <button
+                    onClick={handleGenerateAnswer}
+                    disabled={!quickReplyForm.question || generatingAnswer}
+                    className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-3 py-1 rounded text-sm"
+                  >
+                    {generatingAnswer ? '⏳ Генерация...' : '🤖 Сгенерировать ответ'}
+                  </button>
+                </div>
+                <textarea
+                  value={quickReplyForm.answer}
+                  onChange={(e) => setQuickReplyForm(prev => ({ ...prev, answer: e.target.value }))}
+                  placeholder="Введите ответ или сгенерируйте его автоматически..."
+                  rows={4}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex space-x-3 p-6 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setShowQuickReplyModal(false);
+                  setQuickReplyForm({ question: '', variations: [], answer: '' });
+                }}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-lg transition-colors"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={handleSaveQuickReply}
+                disabled={!quickReplyForm.question || !quickReplyForm.answer}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg transition-colors"
+              >
+                Сохранить
               </button>
             </div>
           </div>

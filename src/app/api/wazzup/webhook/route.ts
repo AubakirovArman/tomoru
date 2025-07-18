@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { openai } from '@/lib/assistant';
+import { checkQuickReply } from '@/lib/quickReplies';
 
 export async function POST(request: NextRequest) {
   try {
@@ -107,13 +108,69 @@ async function handleMessage(payload: any, bot: any) {
   console.log('Processing text message:', text);
 
   console.log('Creating/finding WhatsApp user for contactId:', contactId);
-  const whatsappUser = await prisma.whatsAppUser.upsert({
+  const whatsappUser = await prisma.whatsappUser.upsert({
     where: { whatsappId: String(contactId) },
     update: {},
     create: { whatsappId: String(contactId), pushName: null }
   });
   console.log('WhatsApp user:', whatsappUser.id);
 
+  // Проверяем быстрые ответы перед обращением к OpenAI
+  console.log('Checking quick replies for message:', text);
+  const quickReplyAnswer = await checkQuickReply(bot.id, text);
+  
+  if (quickReplyAnswer) {
+    console.log('Found quick reply answer:', quickReplyAnswer);
+    
+    // Сохраняем сообщение пользователя
+    await prisma.message.create({
+      data: {
+        content: text,
+        messageType: 'USER',
+        botId: bot.id,
+        whatsappUserId: whatsappUser.id,
+        threadId: null
+      }
+    });
+    
+    // Отправляем быстрый ответ
+    console.log('Sending quick reply to Wazzup24...');
+    const wazzupResponse = await fetch('https://api.wazzup24.com/v3/message', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${bot.wazzupApiKey}`
+      },
+      body: JSON.stringify({
+        channelId: bot.wazzupChannelId,
+        chatId: contactId,
+        chatType: 'whatsapp',
+        text: quickReplyAnswer
+      })
+    });
+    
+    if (wazzupResponse.ok) {
+      console.log('Quick reply sent to Wazzup24 successfully');
+    } else {
+      console.error('Failed to send quick reply to Wazzup24:', wazzupResponse.status, await wazzupResponse.text());
+    }
+    
+    // Сохраняем ответ бота
+    await prisma.message.create({
+      data: {
+        content: quickReplyAnswer,
+        messageType: 'BOT',
+        botId: bot.id,
+        whatsappUserId: whatsappUser.id,
+        threadId: null
+      }
+    });
+    
+    console.log('Quick reply process completed');
+    return;
+  }
+  
+  console.log('No quick reply found, proceeding with OpenAI...');
   console.log('Creating OpenAI thread...');
   const thread = await openai.beta.threads.create();
   console.log('Thread created:', thread.id);

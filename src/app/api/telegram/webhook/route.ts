@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { openai } from '@/lib/assistant';
+import { checkQuickReply } from '@/lib/quickReplies';
 
 interface TelegramUpdate {
   update_id: number;
@@ -109,6 +110,41 @@ export async function POST(request: NextRequest) {
         lastName: message.from.last_name || null
       }
     });
+    
+    // Проверяем быстрые ответы перед обращением к OpenAI
+    const quickReplyAnswer = await checkQuickReply(bot.id, userMessage);
+    
+    if (quickReplyAnswer) {
+      // Отправляем быстрый ответ
+      const sentMessage = await sendTelegramMessage(botToken, chatId, quickReplyAnswer);
+      
+      // Сохраняем сообщения в базу данных
+      await prisma.message.create({
+        data: {
+          content: userMessage,
+          messageType: 'USER',
+          botId: bot.id,
+          telegramUserId: telegramUser.id,
+          telegramMessageId: BigInt(message.message_id),
+          threadId: null
+        }
+      });
+      
+      if (sentMessage) {
+        await prisma.message.create({
+          data: {
+            content: quickReplyAnswer,
+            messageType: 'BOT',
+            botId: bot.id,
+            telegramUserId: telegramUser.id,
+            telegramMessageId: BigInt(sentMessage.message_id),
+            threadId: null
+          }
+        });
+      }
+      
+      return NextResponse.json({ ok: true });
+    }
     
     // Получаем ассистента OpenAI
     if (!bot.openaiId) {

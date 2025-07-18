@@ -9,7 +9,7 @@ export async function checkQuickReply(botId: number, userMessage: string): Promi
     console.log('Normalized message:', normalizedMessage);
     
     // Получаем все быстрые ответы для данного бота
-    const quickReplies = await prisma.quickReplies.findMany({
+    const quickReplies = await prisma.quickReply.findMany({
       where: {
         botId: botId
       }

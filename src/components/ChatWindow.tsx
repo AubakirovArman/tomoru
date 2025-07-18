@@ -50,6 +50,12 @@ const ChatWindow = ({ bot, onClose }: ChatWindowProps) => {
   ]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Автопрокрутка к последнему сообщению
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   const handleSendMessage = async () => {
     if (!inputText.trim()) return;
@@ -126,17 +132,17 @@ const ChatWindow = ({ bot, onClose }: ChatWindowProps) => {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-lg h-[600px] w-full max-w-4xl flex flex-col">
+    <div className="glass rounded-xl shadow-lg h-[600px] w-full max-w-4xl flex flex-col overflow-hidden">
       {/* Chat Header */}
-      <div className="bg-blue-600 text-white p-4 rounded-t-lg flex justify-between items-center">
+      <div className="bg-accent-secondary text-foreground p-6 rounded-t-xl flex justify-between items-center">
         <div>
-          <h3 className="text-lg font-semibold">💬 Чат с {currentBot.name}</h3>
-          <p className="text-blue-100 text-sm">Онлайн • {currentBot.specialization}</p>
+          <h3 className="text-xl font-semibold">💬 Чат с {currentBot.name}</h3>
+          <p className="text-text-secondary text-sm">Онлайн • {currentBot.specialization}</p>
         </div>
         {onClose && (
           <button
             onClick={onClose}
-            className="text-white hover:text-gray-200 text-xl font-bold"
+            className="text-foreground hover:text-accent-deep text-xl font-bold transition-colors"
           >
             ×
           </button>
@@ -144,27 +150,18 @@ const ChatWindow = ({ bot, onClose }: ChatWindowProps) => {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-background scroll-smooth">
         {messages.map((message) => (
           <div
             key={message.id}
             className={`flex ${message.isUser ? 'justify-end' : 'justify-start'}`}
           >
             <div
-              className={`max-w-md lg:max-w-2xl px-4 py-2 rounded-lg ${
-                message.isUser
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-800'
-              }`}
+              className={`max-w-md lg:max-w-2xl px-4 py-3 rounded-xl shadow-sm ${message.isUser ? 'bg-accent-secondary text-foreground' : 'bg-white text-foreground'}`}
             >
               <div className="whitespace-pre-wrap text-sm">{message.text}</div>
-              <p className={`text-xs mt-1 ${
-                message.isUser ? 'text-blue-100' : 'text-gray-500'
-              }`}>
-                {message.timestamp.toLocaleTimeString('ru-RU', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
+              <p className={`text-xs mt-1 text-text-secondary`}>
+                {message.timestamp.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
               </p>
             </div>
           </div>
@@ -172,36 +169,37 @@ const ChatWindow = ({ bot, onClose }: ChatWindowProps) => {
         
         {isLoading && (
           <div className="flex justify-start">
-            <div className="bg-gray-100 text-gray-800 max-w-md lg:max-w-2xl px-4 py-2 rounded-lg">
+            <div className="bg-white text-foreground max-w-md lg:max-w-2xl px-4 py-3 rounded-xl shadow-sm">
               <div className="flex items-center space-x-2">
                 <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                  <div className="w-2 h-2 bg-accent-primary rounded-full animate-bounce"></div>
+                  <div className="w-2 h-2 bg-accent-primary rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                  <div className="w-2 h-2 bg-accent-primary rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
                 </div>
-                <span className="text-sm text-gray-500">{currentBot.name} печатает...</span>
+                <span className="text-sm text-text-secondary">{currentBot.name} печатает...</span>
               </div>
             </div>
           </div>
         )}
+        <div ref={messagesEndRef} />
       </div>
 
       {/* Input */}
-      <div className="border-t p-4">
+      <div className="border-t border-border p-4 bg-white">
         <div className="flex space-x-2">
           <textarea
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyPress}
             placeholder="Напишите сообщение... (Enter для отправки)"
-            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none min-h-[40px] max-h-[120px]"
+            className="flex-1 border border-border rounded-lg px-4 py-3 text-foreground placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-deep focus:border-transparent resize-none min-h-[48px] max-h-[120px] bg-white"
             disabled={isLoading}
             rows={1}
           />
           <button
             onClick={handleSendMessage}
             disabled={isLoading || !inputText.trim()}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="button text-foreground hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
             📤
           </button>

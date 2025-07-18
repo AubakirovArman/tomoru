@@ -1,8 +1,18 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #F7F9FC;
+  --foreground: #2F2F2F;
+  --accent-primary: #A8F9C0; /* mint */
+  --accent-secondary: #D0F0C0; /* tea green */
+  --accent-deep: #98E2B8;
+  --border: #E0E0E0;
+  --text-secondary: #7D7D7D;
+
+  --glass-bg: rgba(255, 255, 255, 0.6);
+  --glass-blur: blur(10px);
+  --soft-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  --rounded: 16px;
 }
 
 @theme inline {
@@ -12,15 +22,80 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  line-height: 1.8;
+}
+
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  border-radius: var(--rounded);
+  border: 1px solid var(--border);
+  box-shadow: var(--soft-shadow);
+}
+
+.button {
+  background: var(--accent-primary);
+  border-radius: var(--rounded);
+  padding: 0.5rem 1rem;
+  transition: all 0.3s ease;
+  box-shadow: var(--soft-shadow);
+  color: var(--foreground);
+}
+
+.button:hover {
+  background: var(--accent-deep);
+  box-shadow: 0 0 10px var(--accent-deep);
+}
+
+/* Typography */
+h1 {
+  font-size: 2.5rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+h2 {
+  font-size: 1.8rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+p {
+  color: var(--foreground);
+  line-height: 1.6;
+}
+
+/* Animations */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.4s ease-out;
 }

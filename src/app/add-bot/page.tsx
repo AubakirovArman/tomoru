@@ -117,9 +117,25 @@ export default function AddBotPage() {
     }
   };
 
-  const removeFile = (fileId: string) => {
-    setUploadedFiles(prev => prev.filter(f => f.id !== fileId));
-    setAllUploadedFiles(prev => prev.filter(f => f.id !== fileId));
+  const removeFile = async (fileId: string) => {
+    try {
+      // Удаляем файл с сервера
+      const response = await fetch(`/api/upload?fileId=${fileId}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        // Удаляем файл из локального состояния только после успешного удаления с сервера
+        setUploadedFiles(prev => prev.filter(f => f.id !== fileId));
+        setAllUploadedFiles(prev => prev.filter(f => f.id !== fileId));
+      } else {
+        console.error('Failed to delete file from server');
+        alert('Ошибка при удалении файла');
+      }
+    } catch (error) {
+      console.error('Error deleting file:', error);
+      alert('Ошибка при удалении файла');
+    }
   };
 
   const sendMessage = async () => {
@@ -248,19 +264,19 @@ export default function AddBotPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
       <Navigation />
       
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">🤖 Создание бота</h1>
-            <p className="text-gray-600">Общайтесь с Ботом-Отцом для создания идеального ассистента</p>
+      <div className="flex flex-col flex-1 h-screen bg-white/50 rounded-2xl shadow-inner shadow-gray-300/50 backdrop-blur-md px-4 sm:px-6 lg:px-8 py-4">
+        <div className="max-w-4xl lg:max-w-6xl mx-auto w-full flex flex-col h-full">
+          <div className="mb-4">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1">🤖 Создание бота</h1>
+            <p className="text-gray-600 text-sm sm:text-base">Общайтесь с Ботом-Отцом для создания идеального ассистента</p>
           </div>
 
-          <div className="bg-white rounded-lg shadow-lg h-[700px] w-full flex flex-col mb-6">
+          <div className="bg-[#F9FAFB] rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.05)] flex-1 flex flex-col backdrop-blur-sm border border-white/20 overflow-hidden">
             {/* Chat Header */}
-            <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white p-4 rounded-t-lg">
+            <div className="bg-gradient-to-r from-emerald-100 to-emerald-200 text-gray-900 p-4 sm:p-6 rounded-t-2xl border-b border-emerald-200/30">
               <h3 className="text-lg font-semibold flex items-center">
                 {searchParams.get('template') === 'hr-recruiter' ? (
                   <>
@@ -274,7 +290,7 @@ export default function AddBotPage() {
                   </>
                 )}
               </h3>
-              <p className="text-purple-100 text-sm">
+              <p className="text-emerald-700 text-sm opacity-90">
                 {searchParams.get('template') === 'hr-recruiter' 
                   ? 'Специалист по созданию HR-ботов для найма персонала'
                   : 'Специалист по созданию AI ассистентов'
@@ -283,20 +299,20 @@ export default function AddBotPage() {
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div className="flex-1 p-4 sm:p-6 space-y-4 sm:space-y-6 overflow-y-auto scroll-smooth">
               {messages.map((message) => (
                 <div
                   key={message.id}
                   className={`flex ${message.isUser ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-md lg:max-w-2xl px-4 py-3 rounded-lg ${
-                      message.isUser
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}
-                  >
-                    <div className="whitespace-pre-wrap text-sm">{message.text}</div>
+                      className={`max-w-[85%] sm:max-w-md lg:max-w-3xl px-4 sm:px-6 py-3 sm:py-4 rounded-2xl transition-all duration-300 ease-out animate-fade-in ${
+                        message.isUser
+                          ? 'bg-[#A8F9C0] text-emerald-900 shadow-sm'
+                          : 'bg-white text-gray-800 shadow-sm border border-gray-100'
+                      }`}
+                    >
+                    <div className="whitespace-pre-wrap text-base leading-relaxed">{message.text}</div>
                     {message.files && message.files.length > 0 && (
                       <div className="mt-2 space-y-1">
                         {message.files.map((file) => (
@@ -306,8 +322,8 @@ export default function AddBotPage() {
                         ))}
                       </div>
                     )}
-                    <p className={`text-xs mt-2 ${
-                      message.isUser ? 'text-blue-100' : 'text-gray-500'
+                    <p className={`text-xs mt-3 opacity-70 ${
+                      message.isUser ? 'text-emerald-700' : 'text-gray-500'
                     }`}>
                       {message.timestamp.toLocaleTimeString('ru-RU', {
                         hour: '2-digit',
@@ -319,18 +335,18 @@ export default function AddBotPage() {
               ))}
               
               {isTyping && (
-                <div className="flex justify-start">
-                  <div className="bg-gray-100 text-gray-800 max-w-md lg:max-w-2xl px-4 py-3 rounded-lg">
-                    <div className="flex items-center space-x-2">
+                <div className="flex justify-start animate-slide-up">
+                  <div className="bg-white text-gray-800 max-w-[85%] sm:max-w-md lg:max-w-3xl px-4 sm:px-6 py-3 sm:py-4 rounded-2xl shadow-sm border border-gray-100">
+                    <div className="flex items-center space-x-3">
                       <div className="flex space-x-1">
-                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                        <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce"></div>
+                        <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                        <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
                       </div>
-                      <span className="text-sm text-gray-500">
+                      <span className="text-sm text-gray-600">
                         {searchParams.get('template') === 'hr-recruiter' 
-                          ? 'HR Бот-Отец думает...'
-                          : 'Бот-Отец думает...'
+                          ? 'HR Бот-Отец печатает...'
+                          : 'Бот-Отец печатает...'
                         }
                       </span>
                     </div>
@@ -341,16 +357,16 @@ export default function AddBotPage() {
             </div>
 
             {/* Input */}
-            <div className="border-t p-4">
+            <div className="border-t border-gray-200/50 p-4 sm:p-6 bg-white/50 rounded-b-2xl">
               {/* Uploaded Files */}
               {uploadedFiles.length > 0 && (
-                <div className="mb-3 flex flex-wrap gap-2">
+                <div className="mb-4 flex flex-wrap gap-3 animate-fade-in">
                   {uploadedFiles.map((file) => (
-                    <div key={file.id} className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 flex items-center space-x-2">
-                      <span className="text-sm text-blue-800">📎 {file.name}</span>
+                    <div key={file.id} className="bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 flex items-center space-x-2 transition-all duration-200">
+                      <span className="text-sm text-emerald-800">📎 {file.name}</span>
                       <button
                         onClick={() => removeFile(file.id)}
-                        className="text-blue-600 hover:text-blue-800"
+                        className="text-emerald-600 hover:text-emerald-800 transition-colors"
                       >
                         ✕
                       </button>
@@ -359,13 +375,13 @@ export default function AddBotPage() {
                 </div>
               )}
               
-              <div className="flex space-x-2">
+              <div className="flex space-x-2 sm:space-x-3 items-end">
                 <textarea
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={handleKeyPress}
                   placeholder="Опишите вашего бота... (Enter для отправки)"
-                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none min-h-[40px] max-h-[120px]"
+                  className="flex-1 border border-gray-200 rounded-2xl px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300 resize-none min-h-[44px] sm:min-h-[52px] max-h-[120px] sm:max-h-[150px] bg-white shadow-sm transition-all duration-200"
                   disabled={isTyping}
                   rows={1}
                 />
@@ -378,55 +394,58 @@ export default function AddBotPage() {
                   accept=".txt,.pdf,.doc,.docx,.md,.csv"
                 />
                 <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="bg-gray-100 text-gray-600 px-3 py-2 rounded-lg hover:bg-gray-200 transition-colors"
-                  disabled={isTyping}
-                >
-                  📎
-                </button>
+                    onClick={() => fileInputRef.current?.click()}
+                    className="bg-white text-gray-600 px-3 sm:px-4 py-2 sm:py-3 rounded-2xl hover:bg-gray-50 transition-all duration-200 shadow-sm border border-gray-200 hover:shadow-md"
+                    disabled={isTyping}
+                  >
+                    📎
+                  </button>
                 <button
-                  onClick={sendMessage}
-                  disabled={isTyping || (!inputText.trim() && uploadedFiles.length === 0)}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  📤
-                </button>
+                    onClick={sendMessage}
+                    disabled={isTyping || (!inputText.trim() && uploadedFiles.length === 0)}
+                    className="bg-[#A8F9C0] text-emerald-900 px-4 sm:px-5 py-2 sm:py-3 rounded-2xl hover:bg-emerald-300 shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-105 active:scale-95"
+                  >
+                    📤
+                  </button>
               </div>
             </div>
           </div>
 
-          {/* Bot Configuration Preview */}
-          {botConfig && (
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">🎉 Конфигурация бота готова!</h2>
+        </div>
+        
+        {/* Bot Configuration Preview */}
+        {botConfig && (
+          <div className="bg-white rounded-lg shadow-lg p-6 mt-4 min-h-[80vh] max-h-[90vh] overflow-y-auto max-w-4xl mx-auto">
+            <h2 className="text-2xl font-semibold text-gray-800 mb-6 text-center">🎉 Конфигурация бота готова!</h2>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div>
-                  <h3 className="font-medium text-gray-700 mb-2">Название:</h3>
-                  <p className="text-gray-900">{botConfig.name}</p>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-gray-700 mb-3 text-lg">📝 Название:</h3>
+                  <p className="text-gray-900 text-base">{botConfig.name}</p>
                 </div>
-                <div>
-                  <h3 className="font-medium text-gray-700 mb-2">Специализация:</h3>
-                  <p className="text-gray-900">{botConfig.specialization}</p>
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-gray-700 mb-3 text-lg">🎯 Специализация:</h3>
+                  <p className="text-gray-900 text-base">{botConfig.specialization}</p>
                 </div>
-                <div className="md:col-span-2">
-                  <h3 className="font-medium text-gray-700 mb-2">Описание:</h3>
-                  <p className="text-gray-900">{botConfig.description}</p>
+                <div className="lg:col-span-2 bg-blue-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-gray-700 mb-3 text-lg">📋 Описание:</h3>
+                  <p className="text-gray-900 text-base leading-relaxed">{botConfig.description}</p>
                 </div>
-                <div className="md:col-span-2">
-                  <h3 className="font-medium text-gray-700 mb-2">Личность:</h3>
-                  <p className="text-gray-900">{botConfig.personality}</p>
+                <div className="lg:col-span-2 bg-green-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-gray-700 mb-3 text-lg">🤖 Личность:</h3>
+                  <p className="text-gray-900 text-base leading-relaxed">{botConfig.personality}</p>
                 </div>
                 {allUploadedFiles.length > 0 && (
-                  <div className="md:col-span-2">
-                    <h3 className="font-medium text-gray-700 mb-2">Прикрепленные файлы ({allUploadedFiles.length}):</h3>
-                    <div className="flex flex-wrap gap-2">
+                  <div className="lg:col-span-2 bg-yellow-50 p-4 rounded-lg">
+                    <h3 className="font-semibold text-gray-700 mb-3 text-lg">📎 Прикрепленные файлы ({allUploadedFiles.length}):</h3>
+                    <div className="flex flex-wrap gap-3">
                       {allUploadedFiles.map((file) => (
-                        <div key={file.id} className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 flex items-center space-x-2">
-                          <span className="text-sm text-green-800">📎 {file.name}</span>
+                        <div key={file.id} className="bg-white border border-yellow-200 rounded-lg px-4 py-3 flex items-center space-x-3 shadow-sm">
+                          <span className="text-base text-yellow-800">📎 {file.name}</span>
                           <button
                             onClick={() => removeFile(file.id)}
-                            className="text-green-600 hover:text-green-800"
+                            className="text-yellow-600 hover:text-yellow-800 text-lg font-bold"
+                            title="Удалить файл"
                           >
                             ✕
                           </button>
@@ -437,15 +456,15 @@ export default function AddBotPage() {
                 )}
               </div>
 
-              <div className="flex space-x-4">
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <button
                   onClick={createBot}
                   disabled={isCreatingBot}
-                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                  className="bg-green-600 hover:bg-green-700 text-white px-8 py-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 text-lg font-medium min-w-[200px]"
                 >
                   {isCreatingBot ? (
                     <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
                       <span>Создание...</span>
                     </>
                   ) : (
@@ -457,7 +476,7 @@ export default function AddBotPage() {
                 </button>
                 <button
                   onClick={() => setBotConfig(null)}
-                  className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-6 py-3 rounded-lg transition-colors"
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-8 py-4 rounded-lg transition-colors text-lg font-medium min-w-[200px]"
                 >
                   Изменить конфигурацию
                 </button>
@@ -466,6 +485,5 @@ export default function AddBotPage() {
           )}
         </div>
       </div>
-    </div>
   );
 }

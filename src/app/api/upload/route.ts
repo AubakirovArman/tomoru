@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { verifyToken } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -72,5 +74,92 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error uploading file:', error);
     return NextResponse.json({ error: 'Failed to upload file' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const token = authHeader.substring(7);
+    const decoded = verifyToken(token);
+    if (!decoded) {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const fileId = searchParams.get('fileId');
+    const botId = searchParams.get('botId');
+
+    if (!fileId) {
+      return NextResponse.json({ error: 'File ID is required' }, { status: 400 });
+    }
+
+    // Если указан botId, удаляем файл из векторной базы ассистента
+    if (botId) {
+      try {
+        const bot = await prisma.bot.findFirst({
+          where: {
+            id: parseInt(botId),
+            userId: decoded.userId
+          }
+        });
+
+        if (bot && bot.openaiId) {
+          const assistant = await openai.beta.assistants.retrieve(bot.openaiId);
+          const existingVectorStores = assistant.tool_resources?.file_search?.vector_store_ids || [];
+          
+          if (existingVectorStores.length > 0) {
+            const botVectorStoreId = existingVectorStores[0];
+            
+            // Удаляем файл из векторной базы ассистента
+            try {
+              await openai.vectorStores.files.delete(fileId, {
+                 vector_store_id: botVectorStoreId
+               });
+            } catch (vectorError) {
+              console.error('Error removing file from bot vector store:', vectorError);
+            }
+            
+            // Проверяем, остались ли файлы в векторной базе
+            const remainingFiles = await openai.vectorStores.files.list(botVectorStoreId);
+            
+            // Если файлов не осталось, удаляем file_search tool и векторную базу
+            if (remainingFiles.data.length === 0) {
+              let tools: any[] = assistant.tools || [];
+              tools = tools.filter(t => t.type !== 'file_search');
+              
+              await openai.beta.assistants.update(bot.openaiId, {
+                tools,
+                tool_resources: {
+                  file_search: { vector_store_ids: [] }
+                }
+              });
+              
+              // Удаляем пустую векторную базу
+              try {
+                await openai.vectorStores.delete(botVectorStoreId);
+              } catch (deleteError) {
+                console.error('Error deleting empty vector store:', deleteError);
+              }
+            }
+          }
+        }
+      } catch (botError) {
+        console.error('Error processing bot file deletion:', botError);
+      }
+    }
+
+    // Удаляем файл из OpenAI
+    await openai.files.delete(fileId);
+
+    return NextResponse.json({ success: true });
+
+  } catch (error) {
+    console.error('Error deleting file:', error);
+    return NextResponse.json({ error: 'Failed to delete file' }, { status: 500 });
   }
 }

@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Получаем связанные базы знаний
-    const botKnowledgeBases = await prisma.BotKnowledgeBase.findMany({
+    const botKnowledgeBases = await prisma.botKnowledgeBase.findMany({
       where: {
         botId: parseInt(botId)
       },
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
     // Проверяем, что бот принадлежит пользователю
     const bot = await prisma.bot.findFirst({
       where: {
-        id: botId,
+        id: parseInt(botId),
         userId: decoded.userId
       }
     });
@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Проверяем, не привязана ли уже база знаний к боту
-    const existingLink = await prisma.BotKnowledgeBase.findFirst({
+    const existingLink = await prisma.botKnowledgeBase.findFirst({
       where: {
         botId: parseInt(botId),
         knowledgeBaseId: parseInt(knowledgeBaseId)
@@ -160,7 +160,7 @@ export async function POST(request: NextRequest) {
 
     // Создаем связь
     console.log('Creating link with data:', { botId: parseInt(botId), knowledgeBaseId: parseInt(knowledgeBaseId) });
-    const relation = await prisma.BotKnowledgeBase.create({
+    const relation = await prisma.botKnowledgeBase.create({
       data: {
         botId: parseInt(botId),
         knowledgeBaseId: parseInt(knowledgeBaseId)
@@ -169,18 +169,44 @@ export async function POST(request: NextRequest) {
 
     console.log('Link created successfully:', relation);
 
-    // Привязываем vector store к ассистенту в OpenAI
+    // Копируем файлы из базы знаний в векторную базу ассистента
     if (bot.openaiId && knowledgeBase.vectorStoreId) {
       try {
         const assistant = await openai.beta.assistants.retrieve(bot.openaiId);
-
-        const existingVectorStores =
-          assistant.tool_resources?.file_search?.vector_store_ids || [];
-
-        const updatedVectorStores = Array.from(
-          new Set([...existingVectorStores, knowledgeBase.vectorStoreId])
-        );
-
+        
+        // Получаем существующие vector stores ассистента
+        const existingVectorStores = assistant.tool_resources?.file_search?.vector_store_ids || [];
+        let botVectorStoreId = existingVectorStores[0] || null;
+        
+        // Если у ассистента нет векторной базы, создаем новую
+        if (!botVectorStoreId) {
+          const vectorStore = await openai.vectorStores.create({
+            name: `Bot ${bot.name} Vector Store`
+          });
+          botVectorStoreId = vectorStore.id;
+        }
+        
+        // Получаем файлы из базы знаний
+        const knowledgeBaseFiles = await openai.vectorStores.files.list(knowledgeBase.vectorStoreId);
+        
+        // Копируем файлы в векторную базу ассистента
+        for (const file of knowledgeBaseFiles.data) {
+          try {
+            // Проверяем, не существует ли уже файл в векторной базе ассистента
+            const existingFiles = await openai.vectorStores.files.list(botVectorStoreId);
+            const fileExists = existingFiles.data.some(f => f.id === file.id);
+            
+            if (!fileExists) {
+              await openai.vectorStores.files.create(botVectorStoreId, {
+                file_id: file.id
+              });
+            }
+          } catch (fileError) {
+            console.error(`Error copying file ${file.id} to bot vector store:`, fileError);
+          }
+        }
+        
+        // Обновляем ассистента с новой векторной базой
         let tools: any[] = assistant.tools || [];
         if (!tools.some(t => t.type === 'file_search')) {
           tools.push({ type: 'file_search' });
@@ -189,12 +215,12 @@ export async function POST(request: NextRequest) {
         await openai.beta.assistants.update(bot.openaiId, {
           tools,
           tool_resources: {
-            file_search: { vector_store_ids: updatedVectorStores }
+            file_search: { vector_store_ids: [botVectorStoreId] }
           }
         });
       } catch (assistantError) {
         console.error(
-          'Error attaching knowledge base to assistant:',
+          'Error copying knowledge base files to assistant:',
           assistantError
         );
       }
@@ -260,7 +286,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Удаляем связь
-    const deletedRelation = await prisma.BotKnowledgeBase.deleteMany({
+    const deletedRelation = await prisma.botKnowledgeBase.deleteMany({
       where: {
         botId: parseInt(botId),
         knowledgeBaseId: parseInt(knowledgeBaseId)
@@ -282,32 +308,65 @@ export async function DELETE(request: NextRequest) {
       },
     });
 
-    // Отвязываем vector store от ассистента в OpenAI
+    // Удаляем файлы базы знаний из векторной базы ассистента
     if (bot.openaiId && knowledgeBase?.vectorStoreId) {
       try {
         const assistant = await openai.beta.assistants.retrieve(bot.openaiId);
-
-        const existingVectorStores =
-          assistant.tool_resources?.file_search?.vector_store_ids || [];
-
-        const updatedVectorStores = existingVectorStores.filter(
-          (id: string) => id !== knowledgeBase.vectorStoreId
-        );
-
-        let tools: any[] = assistant.tools || [];
-        if (updatedVectorStores.length === 0) {
-          tools = tools.filter(t => t.type !== 'file_search');
+        const existingVectorStores = assistant.tool_resources?.file_search?.vector_store_ids || [];
+        
+        if (existingVectorStores.length > 0) {
+          const botVectorStoreId = existingVectorStores[0];
+          
+          // Получаем файлы из базы знаний, которую отвязываем
+          const knowledgeBaseFiles = await openai.vectorStores.files.list(knowledgeBase.vectorStoreId);
+          
+          // Удаляем эти файлы из векторной базы ассистента
+          for (const file of knowledgeBaseFiles.data) {
+            try {
+              await openai.vectorStores.files.delete(file.id, {
+                 vector_store_id: botVectorStoreId
+               });
+            } catch (fileError) {
+              console.error(`Error removing file ${file.id} from bot vector store:`, fileError);
+            }
+          }
+          
+          // Проверяем, остались ли файлы в векторной базе ассистента
+          const remainingFiles = await openai.vectorStores.files.list(botVectorStoreId);
+          
+          let tools: any[] = assistant.tools || [];
+          let toolResources = assistant.tool_resources || {};
+          
+          // Если файлов не осталось, удаляем file_search tool и векторную базу
+          if (remainingFiles.data.length === 0) {
+            tools = tools.filter(t => t.type !== 'file_search');
+            toolResources = {
+              ...toolResources,
+              file_search: { vector_store_ids: [] }
+            };
+            
+            // Удаляем пустую векторную базу
+            try {
+              await openai.vectorStores.delete(botVectorStoreId);
+            } catch (deleteError) {
+              console.error('Error deleting empty vector store:', deleteError);
+            }
+          } else {
+            // Если файлы остались, оставляем векторную базу
+            toolResources = {
+              ...toolResources,
+              file_search: { vector_store_ids: [botVectorStoreId] }
+            };
+          }
+          
+          await openai.beta.assistants.update(bot.openaiId, {
+            tools,
+            tool_resources: toolResources
+          });
         }
-
-        await openai.beta.assistants.update(bot.openaiId, {
-          tools,
-          tool_resources: {
-            file_search: { vector_store_ids: updatedVectorStores },
-          },
-        });
       } catch (assistantError) {
         console.error(
-          'Error detaching knowledge base from assistant:',
+          'Error removing knowledge base files from assistant:',
           assistantError
         );
       }

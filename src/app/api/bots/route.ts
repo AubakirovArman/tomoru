@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyToken } from '@/lib/auth';
+import OpenAI from 'openai';
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 export async function GET(request: NextRequest) {
   try {
@@ -128,11 +133,36 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Удаляем бота (только если он принадлежит пользователю)
-    await prisma.bot.delete({
+    // Получаем бота для проверки владельца и получения openaiId
+    const bot = await prisma.bot.findUnique({
       where: {
         id: parseInt(botId),
         userId: decoded.userId // Проверяем владельца
+      }
+    });
+
+    if (!bot) {
+      return NextResponse.json(
+        { error: 'Bot not found or access denied' },
+        { status: 404 }
+      );
+    }
+
+    // Удаляем OpenAI assistant, если он существует
+    if (bot.openaiId) {
+      try {
+        await openai.beta.assistants.delete(bot.openaiId);
+        console.log(`Deleted OpenAI assistant: ${bot.openaiId}`);
+      } catch (openaiError) {
+        console.error('Error deleting OpenAI assistant:', openaiError);
+        // Продолжаем удаление бота даже если не удалось удалить assistant
+      }
+    }
+
+    // Удаляем бота из базы данных
+    await prisma.bot.delete({
+      where: {
+        id: parseInt(botId)
       }
     });
 

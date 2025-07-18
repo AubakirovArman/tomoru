@@ -187,70 +187,104 @@ export default function Knowledge() {
           </div>
 
           <div className="space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {knowledgeBases.map((kb) => (
-                <div key={kb.id} className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="text-2xl">{getCategoryIcon(kb.category)}</div>
-                      <div>
-                        <h3 className="font-semibold text-gray-800">{kb.name}</h3>
-                        <div className="flex space-x-2 mt-1">
-                          <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getCategoryColor(kb.category)}`}>
-                            {kb.category === 'technical' ? 'Техническая' :
-                             kb.category === 'business' ? 'Бизнес' :
-                             kb.category === 'ai' ? 'AI' : 'Общая'}
-                          </span>
-                          <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(kb.status)}`}>
-                            {kb.status === 'ready' ? 'Готова' :
-                             kb.status === 'training' ? 'Обучение' : 'Активна'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <p className="text-gray-600 text-sm mb-4">{kb.description}</p>
-
-                  <div className="space-y-2 mb-4">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">Документов:</span>
-                      <span className="font-medium">{kb.documents}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">Точность:</span>
-                      <span className="font-medium">{kb.accuracy}%</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">Использований:</span>
-                      <span className="font-medium">{kb.usage}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">Размер:</span>
-                      <span className="font-medium">{kb.size}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">Обновлена:</span>
-                      <span className="font-medium">{kb.lastUpdated}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={() => router.push(`/knowledge/${kb.id}`)}
-                      className="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-600 px-3 py-2 rounded text-sm transition-colors"
-                    >
-                      Открыть
-                    </button>
-                    <button
-                      onClick={() => handleDeleteKB(kb)}
-                      className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 px-3 py-2 rounded text-sm transition-colors"
-                    >
-                      Удалить
-                    </button>
-                  </div>
+            {/* Knowledge Bases Table */}
+            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <div className="min-w-[800px]">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          База знаний
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Категория
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Статус
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Документы
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Точность
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Размер
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Обновлена
+                        </th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Действия
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {knowledgeBases.map((kb) => (
+                        <tr key={kb.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center">
+                              <div className="text-xl mr-3">{getCategoryIcon(kb.category)}</div>
+                              <div>
+                                <div className="text-sm font-medium text-gray-900">{kb.name}</div>
+                                <div className="text-sm text-gray-500">{kb.description}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getCategoryColor(kb.category)}`}>
+                              {kb.category === 'technical' ? 'Техническая' :
+                               kb.category === 'business' ? 'Бизнес' :
+                               kb.category === 'ai' ? 'AI' : 'Общая'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(kb.status)}`}>
+                              {kb.status === 'ready' ? 'Готова' :
+                               kb.status === 'training' ? 'Обучение' : 'Активна'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              📄 {kb.documents}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                              📊 {kb.accuracy}%
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {kb.size}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {kb.lastUpdated}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <div className="flex items-center justify-end space-x-1">
+                              <button
+                                onClick={() => router.push(`/knowledge/${kb.id}`)}
+                                className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-blue-700 bg-blue-100 hover:bg-blue-200 transition-colors"
+                                title="Открыть"
+                              >
+                                📂
+                              </button>
+                              <button
+                                onClick={() => handleDeleteKB(kb)}
+                                className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-red-700 bg-red-100 hover:bg-red-200 transition-colors"
+                                title="Удалить"
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              ))}
+              </div>
             </div>
 
             <div className="bg-white rounded-lg shadow-sm p-6">
